@@ -1,0 +1,147 @@
+---
+mass:
+  lambda: "density"
+  thickness: "thkcello"
+  lhs:
+    total: null
+    sum:
+      Eulerian_tendency:
+        total: null
+        product:
+          thickness: "dhdt"
+          density: 1035.
+  rhs:
+    total: null
+    sum:
+      advection:
+        total: null
+        sum:
+          horizontal:
+            total: null
+            product:
+              thickness: "dynamics_h_tendency"
+              density: 1035.
+          vertical:
+            total: null
+            product:
+              thickness: "vert_remap_h_tendency"
+              density: 1035.
+      surface:
+        total: "wfo"
+        product:
+          thickness: "boundary_forcing_h_tendency"
+          density: 1035.
+        sum:
+          rain_and_ice: "prlq"
+          snow: "prsn"
+          evaporation: "evs"
+          rivers: "friver"
+          icebergs: "ficeberg"
+          virtual_precip_restoring: "vprec"
+
+heat:
+  lambda: "thetao"
+  surface_lambda: "tos"
+  lhs:
+    total: null
+    sum:
+      Eulerian_tendency: "opottemptend"
+  rhs:
+    total: null
+    sum:
+      advection:
+        total: null
+        sum:
+          horizontal:
+            total: "T_advection_xy"
+            finite_difference:
+              X: "T_adx"
+              Y: "T_ady"
+          vertical: "Th_tendency_vert_remap"
+      diffusion:
+        total: null
+        sum:
+          horizontal:
+            total: "opottemppmdiff"
+            finite_difference:
+              X: "T_diffx"
+              Y: "T_diffy"
+          vertical: "opottempdiff"
+      surface:
+        total: "boundary_forcing_heat_tendency"
+        sum:
+          nonadvective_exchange_flux:
+            total: null
+            sum:
+              latent: "hflso"
+              sensible: "hfsso"
+              longwave: "rlntds"
+              shortwave:
+                total: "rsdoabsorb"
+                finite_difference:
+                  Z: "rsdo"
+          advective_exchange_flux:
+            total: null
+            product:
+              density: 1035.
+              specific_heat_capacity: 3992.
+              lambda_mass: "tos"
+              surface_mass_flux: "boundary_forcing_h_tendency"
+      bottom: "internal_heat_heat_tendency"
+      frazil_ice: "frazil_heat_tendency"
+  surface_advective_ocean_flux:
+    total: null
+    product:
+      sign: -1.
+      density: 1035.
+      specific_heat_capacity: 3992.
+      lambda_mass: "tos"
+      surface_mass_flux: "boundary_forcing_h_tendency"
+
+salt:
+  lambda: "so"
+  surface_lambda: "sos"
+  lhs:
+    total: null
+    sum:
+      Eulerian_tendency: "osalttend"
+  rhs:
+    total: null
+    sum:
+      advection:
+        total: null
+        sum:
+          horizontal:
+            total: "S_advection_xy"
+            finite_difference:
+              X: "S_adx"
+              Y: "S_ady"
+          vertical: "Sh_tendency_vert_remap"
+      diffusion:
+        total: null
+        sum:
+          neutral:
+            total: "osaltpmdiff"
+            finite_difference:
+              X: "S_diffx"
+              Y: "S_diffy"
+          vertical: "osaltdiff"
+      surface:
+        total: "boundary_forcing_salt_tendency"
+        sum:
+          nonadvective:
+            total: null
+            sum:
+              basal: "sfdsi"
+          advective:
+            total: null
+            product:
+              lambda_mass: 0.
+              surface_mass_flux: "boundary_forcing_h_tendency"
+  surface_advective_ocean_flux:
+    total: null
+    product:
+      density: 1035.
+      unit_conversion: 0.001
+      lambda_mass: "sos"
+      surface_mass_flux: "boundary_forcing_h_tendency"
