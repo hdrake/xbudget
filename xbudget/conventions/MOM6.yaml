@@ -32,7 +32,7 @@ mass:
               var: null
               thickness: "vert_remap_h_tendency"
               density: 1035.
-      surface:
+      surface_flux:
         var: "wfo"
         product:
           var: null
@@ -79,14 +79,14 @@ heat:
               X: "T_diffx"
               Y: "T_diffy"
           vertical: "opottempdiff"
-      surface:
+      surface_flux:
         var: "boundary_forcing_heat_tendency"
         sum:
           var: null
           nonadvective_exchange_flux:
             var: null
             sum:
-              var: null
+              var: null # This sum is currently broken because the shortwave terms are 3D while the other terms are 2D!
               latent: "hflso"
               sensible: "hfsso"
               longwave: "rlntds"
@@ -102,8 +102,9 @@ heat:
               specific_heat_capacity: 3992.
               lambda_mass: "tos"
               surface_mass_flux: "boundary_forcing_h_tendency"
-      bottom: "internal_heat_heat_tendency"
+      bottom_flux: "internal_heat_heat_tendency"
       frazil_ice: "frazil_heat_tendency"
+      
   surface_advective_ocean_flux:
     var: null
     product:
@@ -148,7 +149,7 @@ salt:
               X: "S_diffx"
               Y: "S_diffy"
           vertical: "osaltdiff"
-      surface:
+      surface_flux:
         var: "boundary_forcing_salt_tendency"
         sum:
           var: null
