@@ -8,15 +8,13 @@ def aggregate(budgets, decompose=[]):
         for part,terms in budget.items():
             if part in ["lhs", "rhs"]:
                 new_budgets[tr][part] = deep_search(disaggregate(budget[part], decompose=decompose))
-            elif part in ["surface_advective_ocean_flux"]:
-                new_budgets[tr][part] = {part: budget[part]["var"]}
     return new_budgets
 
-def disaggregate(b, decompose=["advection", "diffusion", "surface_flux", "nonadvective_exchange_flux"]):
+def disaggregate(b, decompose=[]):
     if "sum" in b:
         bsum_novar = {k:v for (k,v) in b["sum"].items() if k!="var"}
         sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
-        return {k:v if k not in decompose else disaggregate(b["sum"][k]) for (k,v) in sum_dict.items()}
+        return {k:v if k not in decompose else disaggregate(b["sum"][k], decompose=decompose) for (k,v) in sum_dict.items()}
     return b
 
 def deep_search(b):
@@ -34,7 +32,7 @@ def _deep_search(b, new_b={}, k_last=None):
 
 def collect_budgets(ds, budgets_dict):
     for eq, v in budgets_dict.items():
-        for part in ["rhs", "lhs", "surface_advective_ocean_flux"]:
+        for part in ["lhs", "rhs"]:
             if part in v:
                 budget_fill(ds, v[part], f"{eq}_{part}", mode="sum_first")
                 budget_fill(ds, v[part], f"{eq}_{part}", mode="product_first")
@@ -52,18 +50,24 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                 budget["sum"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
-                ds[vname] = sum([da for da in sum_list])
+                if vname not in ds:
+                    ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
-            elif "product" in budget:
+            if "var" in budget:
+                if budget["var"] is not None:
+                    return ds[budget["var"]]
+            if "product" in budget:
                 vname = f"{namepath}_product"
                 mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var"]
                 budget["product"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
-                ds[vname] = reduce(mul, [e for e in mul_list], 1)
+                if vname not in ds:
+                    ds[vname] = reduce(mul, [e for e in mul_list], 1)
                 return ds[vname]
-            elif "var" in budget:
-                return ds[budget["var"]]
+            if "var" in budget:
+                if budget["var"] is not None:
+                    return ds[budget["var"]]
         elif mode=="product_first":
             if "product" in budget:
                 vname = f"{namepath}_product"
@@ -71,18 +75,21 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                 budget["product"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
-                ds[vname] = reduce(mul, [e for e in mul_list], 1)
+                if vname not in ds:
+                    ds[vname] = reduce(mul, [e for e in mul_list], 1)
                 return ds[vname]
-            elif "sum" in budget:
+            if "sum" in budget:
                 vname = f"{namepath}_sum"
                 sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var"]
                 budget["sum"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
-                ds[vname] = sum([da for da in sum_list])
+                if vname not in ds:
+                    ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
-            elif "var" in budget:
-                return ds[budget["var"]]
+            if "var" in budget:
+                if budget["var"] is not None:
+                    return ds[budget["var"]]
     else:
         raise ValueError("Broken.")
 
