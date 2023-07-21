@@ -32,7 +32,7 @@ mass:
               var: null
               thickness: "vert_remap_h_tendency"
               density: 1035.
-      surface_flux:
+      surface_exchange_flux:
         var: "wfo"
         product:
           var: null
@@ -70,7 +70,7 @@ heat:
                   X: "T_adx"
                   Y: "T_ady"
               vertical: "Th_tendency_vert_remap"
-      surface_flux_advective_ocean_negative_lhs:
+      surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
           var: null
@@ -93,11 +93,11 @@ heat:
               X: "T_diffx"
               Y: "T_diffy"
           vertical: "opottempdiff"
-      surface_flux:
+      surface_exchange_flux:
         var: "boundary_forcing_heat_tendency"
         sum:
           var: null
-          nonadvective_exchange:
+          nonadvective:
             var: null
             sum:
               var: null # This sum is currently broken because the shortwave terms are 3D while the other terms are 2D!
@@ -108,7 +108,7 @@ heat:
                 var: "rsdoabsorb"
                 finite_difference:
                   Z: "rsdo"
-          advective_exchange:
+          advective:
             var: "heat_content_surfwater"
             product:
               var: null
@@ -116,15 +116,15 @@ heat:
               specific_heat_capacity: 3992.
               lambda_mass: "tos"
               surface_mass_flux: "boundary_forcing_h_tendency"
-          advective_ocean_negative_rhs:
-            var: null
-            product:
-              var: null
-              sign: -1.
-              density: 1035.
-              specific_heat_capacity: 3992.
-              lambda_mass: "tos"
-              surface_mass_flux: "boundary_forcing_h_tendency"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        product:
+          var: null
+          sign: -1.
+          density: 1035.
+          specific_heat_capacity: 3992.
+          lambda_mass: "tos"
+          surface_mass_flux: "boundary_forcing_h_tendency"
       bottom_flux: "internal_heat_heat_tendency"
       frazil_ice: "frazil_heat_tendency"
 
@@ -151,7 +151,7 @@ salt:
                   X: "S_adx"
                   Y: "S_ady"
               vertical: "Sh_tendency_vert_remap"
-      surface_flux_advective_ocean_negative_lhs:
+      surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
           var: null
@@ -175,26 +175,26 @@ salt:
               X: "S_diffx"
               Y: "S_diffy"
           vertical: "osaltdiff"
-      surface_flux:
+      surface_exchange_flux:
         var: "boundary_forcing_salt_tendency"
         sum:
           var: null
-          nonadvective_exchange:
+          nonadvective:
             var: null
             sum:
               var: null
               basal: "sfdsi"
-          advective_exchange:
+          advective:
             var: null
             product:
               var: null
               lambda_mass: 0.
               surface_mass_flux: "boundary_forcing_h_tendency"
-          advective_ocean_negative_rhs:
-            var: null
-            product:
-              var: null
-              density: 1035.
-              unit_conversion: 0.001
-              lambda_mass: "sos"
-              surface_mass_flux: "boundary_forcing_h_tendency"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        product:
+          var: null
+          density: 1035.
+          unit_conversion: 0.001
+          lambda_mass: "sos"
+          surface_mass_flux: "boundary_forcing_h_tendency"
