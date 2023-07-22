@@ -20,13 +20,13 @@ mass:
         var: null
         sum:
           var: null
-          horizontal:
+          lateral:
             var: null
             product:
               var: null
               thickness: "dynamics_h_tendency"
               density: 1035.
-          vertical:
+          interfacial:
             var: null
             product:
               var: null
@@ -64,12 +64,12 @@ heat:
             var: null
             sum:
               var: null
-              horizontal:
+              lateral:
                 var: "T_advection_xy"
                 finite_difference:
                   X: "T_adx"
                   Y: "T_ady"
-              vertical: "Th_tendency_vert_remap"
+              interfacial: "Th_tendency_vert_remap"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -87,12 +87,12 @@ heat:
         var: null
         sum:
           var: null
-          horizontal:
+          lateral:
             var: "opottemppmdiff"
             finite_difference:
               X: "T_diffx"
               Y: "T_diffy"
-          vertical: "opottempdiff"
+          interfacial: "opottempdiff"
       surface_exchange_flux:
         var: "boundary_forcing_heat_tendency"
         sum:
@@ -145,12 +145,12 @@ salt:
             var: null
             sum:
               var: null
-              horizontal:
+              lateral:
                 var: "S_advection_xy"
                 finite_difference:
                   X: "S_adx"
                   Y: "S_ady"
-              vertical: "Sh_tendency_vert_remap"
+              interfacial: "Sh_tendency_vert_remap"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -168,13 +168,13 @@ salt:
         var: null
         sum:
           var: null
-          neutral:
+          lateral:
             var: "osaltpmdiff"
             finite_difference:
               var: null
               X: "S_diffx"
               Y: "S_diffy"
-          vertical: "osaltdiff"
+          interfacial: "osaltdiff"
       surface_exchange_flux:
         var: "boundary_forcing_salt_tendency"
         sum:
