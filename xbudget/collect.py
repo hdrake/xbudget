@@ -2,6 +2,8 @@ from operator import mul
 from functools import reduce
 import copy
 
+import numpy as np
+
 def aggregate(budgets, decompose=[]):
     new_budgets = copy.deepcopy(budgets)
     for tr,budget in budgets.items():
@@ -92,6 +94,44 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                     return ds[budget["var"]]
     else:
         raise ValueError("Broken.")
+        
+def get_vars(b, terms, k_long=""):
+    if isinstance(terms, (list, np.ndarray)):
+        return [get_vars(b, term) for term in terms]
+    elif type(terms) is str:
+        for k,v in b.items():
+            if type(v) is str:
+                k_short = k_long.replace("_sum", "").replace("_product", "")
+                if v==terms:
+                    decomps = {"var": v}
+                    if len(terms) > len("_sum"):
+                        if (terms[-len("_sum"):] == "_sum") and ("sum" in b):
+                            ts = {kk:vv for (kk,vv) in b["sum"].items() if kk!="var"}
+                            decomps["sum"] = [vv["var"] if type(vv) is dict else vv for (kk,vv) in ts.items()]
+                        elif (terms[-len("_sum"):] == "_sum"):
+                            ts = {kk:vv for (kk,vv) in b.items() if kk!="var"}
+                            decomps["sum"] = [vv["var"] if type(vv) is dict else vv for (kk,vv) in ts.items()]
+                    if len(terms) > len("_product"):
+                        if (terms[-len("_product"):] == "_product") and ("product" in b):
+                            ts = {kk:vv for (kk,vv) in b["product"].items() if kk!="var"}
+                            decomps["product"] = [vv["var"] if type(vv) is dict else vv for (kk,vv) in ts.items()]
+                        elif (terms[-len("_product"):] == "_product"):
+                            ts = {kk:vv for (kk,vv) in b.items() if kk!="var"}
+                            decomps["product"] = [vv["var"] if type(vv) is dict else vv for (kk,vv) in ts.items()]
+                    return decomps
+
+                if k!="var":
+                    k_short+="_"+k
+                if k_short==terms:
+                    return v
+            elif type(v) is dict:
+                if k_long=="":
+                    new_k = k
+                elif len(k_long)>0:
+                    new_k = f"{k_long}_{k}"
+                var = get_vars(v, terms, k_long=new_k)
+                if var is not None:
+                    return var
 
 def flatten(container):
     for i in container:
