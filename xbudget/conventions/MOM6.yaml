@@ -2,6 +2,9 @@
 mass:
   lambda: "density"
   thickness: "thkcello"
+  transport:
+    X: umo
+    Y: vmo
   lhs:
     var: null
     sum:
@@ -33,7 +36,7 @@ mass:
               thickness_tendency: "vert_remap_h_tendency"
               density: 1035.
       surface_exchange_flux:
-        var: null # == "wfo", but we neglect it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
+        var: "mass_rhs_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
         product:
           var: null
           thickness_tendency: "boundary_forcing_h_tendency"

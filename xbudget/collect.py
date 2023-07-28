@@ -53,6 +53,7 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                 if budget["var"] is None:
                     budget["var"] = vname
                 if vname not in ds:
+                    # TO DO: Raise error here
                     ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
             if "var" in budget:
@@ -87,13 +88,14 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                 if budget["var"] is None:
                     budget["var"] = vname
                 if vname not in ds:
+                    # TO DO: Raise error here
                     ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
             if "var" in budget:
                 if budget["var"] is not None:
                     return ds[budget["var"]]
     else:
-        raise ValueError("Broken.")
+        return None
         
 def get_vars(b, terms, k_long=""):
     if isinstance(terms, (list, np.ndarray)):
