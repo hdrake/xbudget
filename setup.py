@@ -1,6 +1,5 @@
-import setuptools
-
-setuptools.setup(
+from setuptools import setup
+setup(
     name="xbudget",
     version="0.0.1",
     author="Henri Drake",
@@ -9,5 +8,6 @@ setuptools.setup(
     license="GPLv3",
     keywords="",
     url="https://github.com/hdrake/xbudget",
-    packages=['xbudget']
+    packages=['xbudget'],
+    include_package_data=True
 )
