@@ -1,0 +1,152 @@
+---
+mass:
+  lambda: "density"
+  thickness: "thkcello"
+  transport:
+    X: umo
+    Y: vmo
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          thickness_tendency: "dhdt"
+          density: 1035.
+  rhs:
+    var: null
+    sum:
+      var: null
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              thickness_tendency: "dynamics_h_tendency"
+              density: 1035.
+          interfacial:
+            var: null
+            product:
+              var: null
+              thickness_tendency: "vert_remap_h_tendency"
+              density: 1035.
+      surface_exchange_flux:
+        var: null
+        product:
+          var: null
+          thickness_tendency: "boundary_forcing_h_tendency"
+          density: 1035.
+
+heat:
+  lambda: "thetao"
+  surface_lambda: "tos"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency: "opottemptend"
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              convergence: "T_advection_xy"
+          interfacial:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              convergence: "Th_tendency_vert_remap"
+      surface_ocean_flux_advective_negative_lhs:
+        var: null
+        product:
+          var: null
+          sign: -1.
+          specific_heat_capacity: 3992.
+          lambda_mass: "tos"
+          thickness_tendency: "boundary_forcing_h_tendency"
+          density: 1035.
+  rhs:
+    var: null
+    sum:
+      var: null
+      diffusion:
+        var: null
+        sum:
+          var: null
+          lateral: "opottemppmdiff"
+          interfacial: "opottempdiff"
+      surface_exchange_flux: "boundary_forcing_heat_tendency"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        product:
+          var: null
+          sign: -1.
+          specific_heat_capacity: 3992.
+          lambda_mass: "tos"
+          thickness_tendency: "boundary_forcing_h_tendency"
+          density: 1035.
+      bottom_flux: "internal_heat_heat_tendency"
+      frazil_ice: "frazil_heat_tendency"
+
+salt:
+  lambda: "so"
+  surface_lambda: "sos"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency: "osalttend"
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              convergence: "S_advection_xy"
+          interfacial:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              convergence: "Sh_tendency_vert_remap"
+      surface_ocean_flux_advective_negative_lhs:
+        var: null
+        product:
+          var: null
+          unit_conversion: 0.001
+          lambda_mass: "sos"
+          thickness_tendency: "boundary_forcing_h_tendency"
+          density: 1035.
+      
+  rhs:
+    var: null
+    sum:
+      var: null
+      diffusion:
+        var: null
+        sum:
+          var: null
+          lateral: "osaltpmdiff"
+          interfacial: "osaltdiff"
+      surface_exchange_flux: "boundary_forcing_salt_tendency"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        product:
+          var: null
+          unit_conversion: 0.001
+          lambda_mass: "sos"
+          thickness_tendency: "boundary_forcing_h_tendency"
+          density: 1035.
