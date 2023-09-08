@@ -13,12 +13,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dask",
-    "numba",
     "numpy",
-    "scipy",
     "xarray",
-    "xgcm @ git+https://github.com/xgcm/xgcm.git@7492277de22ed1e677a6a7523b61b20643a98a77",
 ]
 
 [project.urls]

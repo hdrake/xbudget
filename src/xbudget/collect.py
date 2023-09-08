@@ -1,7 +1,6 @@
 from operator import mul
 from functools import reduce
 import copy
-
 import numpy as np
 
 def aggregate(budgets, decompose=[]):
