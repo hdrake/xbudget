@@ -13,7 +13,7 @@ def aggregate(budgets, decompose=[]):
 
 def disaggregate(b, decompose=[]):
     if "sum" in b:
-        bsum_novar = {k:v for (k,v) in b["sum"].items() if k!="var"}
+        bsum_novar = {k:v for (k,v) in b["sum"].items() if (k!="var") and (v is not None)}
         sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
         return {k:v if k not in decompose else disaggregate(b["sum"][k], decompose=decompose) for (k,v) in sum_dict.items()}
     return b
@@ -47,12 +47,11 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
         if mode=="sum_first":
             if "sum" in budget:
                 vname = f"{namepath}_sum"
-                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var"]
+                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var" and v is not None]
                 budget["sum"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
                 if vname not in ds:
-                    # TO DO: Raise error here
                     ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
             if "var" in budget:
@@ -60,7 +59,7 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                     return ds[budget["var"]]
             if "product" in budget:
                 vname = f"{namepath}_product"
-                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var"]
+                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var" and v is not None]
                 budget["product"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
@@ -73,7 +72,7 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
         elif mode=="product_first":
             if "product" in budget:
                 vname = f"{namepath}_product"
-                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var"]
+                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var" and v is not None]
                 budget["product"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
@@ -82,12 +81,11 @@ def budget_fill(ds, budget, namepath, mode="sum_first"):
                 return ds[vname]
             if "sum" in budget:
                 vname = f"{namepath}_sum"
-                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var"]
+                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var" and v is not None]
                 budget["sum"]["var"] = vname
                 if budget["var"] is None:
                     budget["var"] = vname
                 if vname not in ds:
-                    # TO DO: Raise error here
                     ds[vname] = sum([da for da in sum_list])
                 return ds[vname]
             if "var" in budget:
