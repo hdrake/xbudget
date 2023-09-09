@@ -9,12 +9,7 @@ mass:
     var: null
     sum:
       var: null
-      Eulerian_tendency:
-        var: null
-        product:
-          var: null
-          thickness_tendency: "dhdt"
-          density: 1035.
+      Eulerian_tendency: null
   rhs:
     var: null
     sum:
@@ -126,6 +121,7 @@ salt:
         var: null
         product:
           var: null
+          sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
@@ -146,6 +142,7 @@ salt:
         var: null
         product:
           var: null
+          sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"

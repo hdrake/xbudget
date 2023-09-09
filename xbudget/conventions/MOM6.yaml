@@ -168,6 +168,7 @@ salt:
         var: null
         product:
           var: null
+          sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
@@ -209,6 +210,7 @@ salt:
         var: null
         product:
           var: null
+          sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
