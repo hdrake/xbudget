@@ -14,22 +14,7 @@ mass:
     var: null
     sum:
       var: null
-      advection:
-        var: null
-        sum:
-          var: null
-          lateral:
-            var: null
-            product:
-              var: null
-              thickness_tendency: "dynamics_h_tendency"
-              density: 1035.
-          interfacial:
-            var: null
-            product:
-              var: null
-              thickness_tendency: "vert_remap_h_tendency"
-              density: 1035.
+      advection: null
       surface_exchange_flux:
         var: null
         product:

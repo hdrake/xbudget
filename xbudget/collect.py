@@ -2,13 +2,17 @@ from operator import mul
 from functools import reduce
 import copy
 import numpy as np
+import numbers
+import xarray as xr
 
 def aggregate(budgets, decompose=[]):
     new_budgets = copy.deepcopy(budgets)
     for tr,budget in budgets.items():
         for part,terms in budget.items():
             if part in ["lhs", "rhs"]:
-                new_budgets[tr][part] = deep_search(disaggregate(budget[part], decompose=decompose))
+                new_budgets[tr][part] = deep_search(
+                    disaggregate(budget[part], decompose=decompose)
+                )
     return new_budgets
 
 def disaggregate(b, decompose=[]):
@@ -35,64 +39,45 @@ def collect_budgets(ds, budgets_dict):
     for eq, v in budgets_dict.items():
         for part in ["lhs", "rhs"]:
             if part in v:
-                budget_fill(ds, v[part], f"{eq}_{part}", mode="sum_first")
-                budget_fill(ds, v[part], f"{eq}_{part}", mode="product_first")
+                budget_fill_dict(ds, v[part], f"{eq}_{part}")
+
+def budget_fill_dict(ds, bdict, namepath):
+    if ((bdict["var"] is not None) and
+        (bdict["var"] in ds)       and
+        (namepath not in ds)):
+        var_rename = ds[bdict["var"]].rename(namepath)
+        var_rename.attrs['provenance'] = bdict["var"]
+        ds[namepath] = ds[bdict["var"]]
+
+    for k,v in bdict.items():
+        if k in ['sum', 'product']:
+            op_list = []
+            for k_term, v_term in v.items():
+                if isinstance(v_term, numbers.Number):
+                    op_list.append(v_term)
+                elif isinstance(v_term, str):
+                    op_list.append(ds[v_term])
+                elif isinstance(v_term, dict):
+                    op_list.append(budget_fill_dict(ds, v_term, f"{namepath}_{k}_{k_term}"))
+                    
+            if len(op_list) == 0:
+                return None
+            else:
+                var = sum(op_list) if k=="sum" else reduce(mul, op_list, 1)
+            var_name = f"{namepath}_{k}"
+            var = var.rename(var_name)
+            var_provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
+            var.attrs["provenance"] = var_provenance
+            ds[var_name] = var
+            if (bdict[k]["var"] is None):
+                bdict[k]["var"] = var_name
                 
-def budget_fill(ds, budget, namepath, mode="sum_first"):
-    if type(budget) is float:
-        return budget
-    elif type(budget) is str:
-        return ds[budget]
-    elif type(budget) is dict:
-        if mode=="sum_first":
-            if "sum" in budget:
-                vname = f"{namepath}_sum"
-                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var" and v is not None]
-                budget["sum"]["var"] = vname
-                if budget["var"] is None:
-                    budget["var"] = vname
-                if vname not in ds:
-                    ds[vname] = sum([da for da in sum_list])
-                return ds[vname]
-            if "var" in budget:
-                if budget["var"] is not None:
-                    return ds[budget["var"]]
-            if "product" in budget:
-                vname = f"{namepath}_product"
-                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var" and v is not None]
-                budget["product"]["var"] = vname
-                if budget["var"] is None:
-                    budget["var"] = vname
-                if vname not in ds:
-                    ds[vname] = reduce(mul, [e for e in mul_list], 1)
-                return ds[vname]
-            if "var" in budget:
-                if budget["var"] is not None:
-                    return ds[budget["var"]]
-        elif mode=="product_first":
-            if "product" in budget:
-                vname = f"{namepath}_product"
-                mul_list = [budget_fill(ds, v, f"{namepath}", mode=mode) for k,v in budget["product"].items() if k!="var" and v is not None]
-                budget["product"]["var"] = vname
-                if budget["var"] is None:
-                    budget["var"] = vname
-                if vname not in ds:
-                    ds[vname] = reduce(mul, [e for e in mul_list], 1)
-                return ds[vname]
-            if "sum" in budget:
-                vname = f"{namepath}_sum"
-                sum_list = [budget_fill(ds, v, f"{namepath}_{k}", mode=mode) for k,v in budget["sum"].items() if k!="var" and v is not None]
-                budget["sum"]["var"] = vname
-                if budget["var"] is None:
-                    budget["var"] = vname
-                if vname not in ds:
-                    ds[vname] = sum([da for da in sum_list])
-                return ds[vname]
-            if "var" in budget:
-                if budget["var"] is not None:
-                    return ds[budget["var"]]
-    else:
-        return None
+            if (bdict["var"] is None) and (namepath not in ds):
+                var_copy = var.copy()
+                var_copy.attrs["provenance"] = var_name
+                ds[namepath] = var_copy
+                bdict["var"] = namepath
+            return var
         
 def get_vars(b, terms, k_long=""):
     if isinstance(terms, (list, np.ndarray)):

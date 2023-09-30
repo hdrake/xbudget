@@ -36,7 +36,7 @@ mass:
               thickness_tendency: "vert_remap_h_tendency"
               density: 1035.
       surface_exchange_flux:
-        var: "mass_rhs_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
+        var: "mass_rhs_sum_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
         product:
           var: null
           thickness_tendency: "boundary_forcing_h_tendency"
@@ -68,7 +68,7 @@ heat:
               var: null
               sign: -1.
               convergence: "T_advection_xy"
-                # Not very supported:
+                # Not yet supported!
                 #finite_difference:
                 #  X: "T_adx"
                 #  Y: "T_ady"
@@ -95,11 +95,12 @@ heat:
         var: null
         sum:
           var: null
-          lateral:
-            var: "opottemppmdiff"
-            finite_difference:
-              X: "T_diffx"
-              Y: "T_diffy"
+          lateral: "opottemppmdiff"
+            # Not yet supported!
+            #finite_difference:
+            #  var: null
+            #  X: "T_diffx"
+            #  Y: "T_diffy"
           interfacial: "opottempdiff"
       surface_exchange_flux:
         var: "boundary_forcing_heat_tendency"
@@ -112,10 +113,11 @@ heat:
               latent: "hflso"
               sensible: "hfsso"
               longwave: "rlntds"
-              shortwave:
-                var: "rsdoabsorb"
-                finite_difference:
-                  Z: "rsdo"
+              shortwave: "rsdoabsorb"
+                # Not yet supported!
+                #var: "rsdoabsorb"
+                #finite_difference:
+                #  Z: "rsdo"
           advective:
             var: "heat_content_surfwater"
             product:
@@ -154,7 +156,7 @@ salt:
               var: null
               sign: -1.
               convergence: "S_advection_xy"
-                # Not very supported:
+                # Not yet supported!
                 #finite_difference:
                 #  X: "S_adx"
                 #  Y: "S_ady"
@@ -182,12 +184,12 @@ salt:
         var: null
         sum:
           var: null
-          lateral:
-            var: "osaltpmdiff"
-            finite_difference:
-              var: null
-              X: "S_diffx"
-              Y: "S_diffy"
+          lateral: "osaltpmdiff"
+            # Not yet supported!
+            #finite_difference:
+            #  var: null
+            #  X: "S_diffx"
+            #  Y: "S_diffy"
           interfacial: "osaltdiff"
       surface_exchange_flux:
         var: "boundary_forcing_salt_tendency"
