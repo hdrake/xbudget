@@ -1,35 +1,60 @@
 ---
-mass:
+mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
-  thickness: "thkcello"
-  transport:
-    X: umo
-    Y: vmo
   lhs:
     var: null
     sum:
       var: null
-      Eulerian_tendency: null
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          thickness_tendency: "dhdt"
+          density: 1035.
+          area: "areacello"
   rhs:
     var: null
     sum:
       var: null
-      advection: null
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              thickness_tendency: "dynamics_h_tendency"
+              density: 1035.
+              area: "areacello"
+          interfacial:
+            var: null
+            product:
+              var: null
+              thickness_tendency: "vert_remap_h_tendency"
+              density: 1035.
+              area: "areacello"
       surface_exchange_flux:
         var: null
         product:
           var: null
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
 
-heat:
+heat: # finite-volume heat budget in units of J/s
   lambda: "thetao"
   surface_lambda: "tos"
   lhs:
     var: null
     sum:
       var: null
-      Eulerian_tendency: "opottemptend"
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "opottemptend"
+          area: "areacello"
       advection:
         var: null
         sum:
@@ -39,13 +64,15 @@ heat:
             product:
               var: null
               sign: -1.
-              convergence: "T_advection_xy"
+              tracer_content_tendency_per_unit_area: "T_advection_xy"
+              area: "areacello"
           interfacial:
             var: null
             product:
               var: null
               sign: -1.
-              convergence: "Th_tendency_vert_remap"
+              tracer_content_tendency_per_unit_area: "Th_tendency_vert_remap"
+              area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -55,6 +82,7 @@ heat:
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
   rhs:
     var: null
     sum:
@@ -63,9 +91,25 @@ heat:
         var: null
         sum:
           var: null
-          lateral: "opottemppmdiff"
-          interfacial: "opottempdiff"
-      surface_exchange_flux: "boundary_forcing_heat_tendency"
+          lateral:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "opottemppmdiff"
+              area: "areacello"
+          interfacial:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "opottempdiff"
+              area: "areacello"
+            
+      surface_exchange_flux:
+        var:
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "boundary_forcing_heat_tendency"
+          area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
         var: null
         product:
@@ -75,17 +119,33 @@ heat:
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
-      bottom_flux: "internal_heat_heat_tendency"
-      frazil_ice: "frazil_heat_tendency"
+          area: "areacello"
+      bottom_flux:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "internal_heat_heat_tendency"
+          area: "areacello"
+      frazil_ice:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "frazil_heat_tendency"
+          area: "areacello"
 
-salt:
+salt: # finite-volume salt budget in units of kg/s
   lambda: "so"
   surface_lambda: "sos"
   lhs:
     var: null
     sum:
       var: null
-      Eulerian_tendency: "osalttend"
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "osalttend"
+          area: "areacello"
       advection:
         var: null
         sum:
@@ -95,13 +155,15 @@ salt:
             product:
               var: null
               sign: -1.
-              convergence: "S_advection_xy"
+              tracer_content_tendency_per_unit_area: "S_advection_xy"
+              area: "areacello"
           interfacial:
             var: null
             product:
               var: null
               sign: -1.
-              convergence: "Sh_tendency_vert_remap"
+              tracer_content_tendency_per_unit_area: "Sh_tendency_vert_remap"
+              area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -111,6 +173,7 @@ salt:
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
       
   rhs:
     var: null
@@ -120,9 +183,24 @@ salt:
         var: null
         sum:
           var: null
-          lateral: "osaltpmdiff"
-          interfacial: "osaltdiff"
-      surface_exchange_flux: "boundary_forcing_salt_tendency"
+          lateral:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "osaltpmdiff"
+              area: "areacello"
+          interfacial:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "osaltdiff"
+              area: "areacello"
+      surface_exchange_flux:
+        var:
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "boundary_forcing_salt_tendency"
+          area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
         var: null
         product:
@@ -132,3 +210,4 @@ salt:
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"

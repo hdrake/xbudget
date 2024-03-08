@@ -1,10 +1,6 @@
 ---
-mass:
+mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
-  thickness: "thkcello"
-  transport:
-    X: umo
-    Y: vmo
   lhs:
     var: null
     sum:
@@ -15,6 +11,7 @@ mass:
           var: null
           thickness_tendency: "dhdt"
           density: 1035.
+          area: "areacello"
   rhs:
     var: null
     sum:
@@ -29,35 +26,85 @@ mass:
               var: null
               thickness_tendency: "dynamics_h_tendency"
               density: 1035.
+              area: "areacello"
+            # sum:
+            #   var: null
+            #   zonal:
+            #     var: null
+            #     difference:
+            #       var: null
+            #       mass_transport: "umo"
+            #   meridional:
+            #     var: null
+            #     difference:
+            #       var: null
+            #       mass_transport: "vmo"
           interfacial:
             var: null
             product:
               var: null
               thickness_tendency: "vert_remap_h_tendency"
               density: 1035.
+              area: "areacello"
       surface_exchange_flux:
-        var: "mass_rhs_sum_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
+        var: null #"mass_rhs_sum_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
         product:
           var: null
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
         sum:
           var: null
-          rain_and_ice: "prlq"
-          snow: "prsn"
-          evaporation: "evs"
-          rivers: "friver"
-          icebergs: "ficeberg"
-          virtual_precip_restoring: "vprec"
+          rain_and_ice:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "prlq"
+              area: "areacello"
+          snow:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "prsn"
+              area: "areacello"
+          evaporation:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "evs"
+              area: "areacello"
+          rivers:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "friver"
+              area: "areacello"
+          icebergs:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "ficeberg"
+              area: "areacello"
+          virtual_precip_restoring:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "vprec"
+              area: "areacello"
 
-heat:
+heat: # finite-volume heat budget in units of J/s
   lambda: "thetao"
   surface_lambda: "tos"
   lhs:
     var: null
     sum:
       var: null
-      Eulerian_tendency: "opottemptend"
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "opottemptend"
+          area: "areacello"
       advection:
         var: null
         sum:
@@ -67,17 +114,15 @@ heat:
             product:
               var: null
               sign: -1.
-              convergence: "T_advection_xy"
-                # Not yet supported!
-                #finite_difference:
-                #  X: "T_adx"
-                #  Y: "T_ady"
+              tracer_content_tendency_per_unit_area: "T_advection_xy"
+              area: "areacello"
           interfacial:
             var: null
             product:
               var: null
               sign: -1.
-              convergence: "Th_tendency_vert_remap"
+              tracer_content_tendency_per_unit_area: "Th_tendency_vert_remap"
+              area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -87,6 +132,7 @@ heat:
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
   rhs:
     var: null
     sum:
@@ -95,37 +141,73 @@ heat:
         var: null
         sum:
           var: null
-          lateral: "opottemppmdiff"
-            # Not yet supported!
-            #finite_difference:
-            #  var: null
-            #  X: "T_diffx"
-            #  Y: "T_diffy"
-          interfacial: "opottempdiff"
+          lateral:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "opottemppmdiff"
+              area: "areacello"
+          interfacial:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "opottempdiff"
+              area: "areacello"
+            
       surface_exchange_flux:
-        var: "boundary_forcing_heat_tendency"
+        var:
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "boundary_forcing_heat_tendency"
+          area: "areacello"
         sum:
           var: null
           nonadvective:
             var: null
             sum:
               var: null # This sum is currently broken because the shortwave terms are 3D while the other terms are 2D!
-              latent: "hflso"
-              sensible: "hfsso"
-              longwave: "rlntds"
-              shortwave: "rsdoabsorb"
+              latent:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "hflso"
+                  area: "areacello"
+              sensible:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "hfsso"
+                  area: "areacello"
+              longwave:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "rlntds"
+                  area: "areacello"
+              shortwave:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "rsdoabsorb"
+                  area: "areacello"
                 # Not yet supported!
                 #var: "rsdoabsorb"
                 #finite_difference:
                 #  Z: "rsdo"
           advective:
-            var: "heat_content_surfwater"
+            var:
             product:
               var: null
-              specific_heat_capacity: 3992.
-              lambda_mass: "tos"
-              thickness_tendency: "boundary_forcing_h_tendency"
-              density: 1035.
+              tracer_content_tendency_per_unit_area: "heat_content_surfwater"
+              area: "areacello"
+            #Alternative method:
+            #product:
+            #  var: null
+            #  specific_heat_capacity: 3992.
+            #  lambda_mass: "tos"
+            #  thickness_tendency: "boundary_forcing_h_tendency"
+            #  density: 1035.
+            #  area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
         var: null
         product:
@@ -135,17 +217,33 @@ heat:
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
-      bottom_flux: "internal_heat_heat_tendency"
-      frazil_ice: "frazil_heat_tendency"
+          area: "areacello"
+      bottom_flux:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "internal_heat_heat_tendency"
+          area: "areacello"
+      frazil_ice:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "frazil_heat_tendency"
+          area: "areacello"
 
-salt:
+salt: # finite-volume salt budget in units of kg/s
   lambda: "so"
   surface_lambda: "sos"
   lhs:
     var: null
     sum:
       var: null
-      Eulerian_tendency: "osalttend"
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "osalttend"
+          area: "areacello"
       advection:
         var: null
         sum:
@@ -155,17 +253,15 @@ salt:
             product:
               var: null
               sign: -1.
-              convergence: "S_advection_xy"
-                # Not yet supported!
-                #finite_difference:
-                #  X: "S_adx"
-                #  Y: "S_ady"
+              tracer_content_tendency_per_unit_area: "S_advection_xy"
+              area: "areacello"
           interfacial:
             var: null
             product:
               var: null
               sign: -1.
-              convergence: "Sh_tendency_vert_remap"
+              tracer_content_tendency_per_unit_area: "Sh_tendency_vert_remap"
+              area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
         var: null
         product:
@@ -175,6 +271,7 @@ salt:
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"
       
   rhs:
     var: null
@@ -184,22 +281,36 @@ salt:
         var: null
         sum:
           var: null
-          lateral: "osaltpmdiff"
-            # Not yet supported!
-            #finite_difference:
-            #  var: null
-            #  X: "S_diffx"
-            #  Y: "S_diffy"
-          interfacial: "osaltdiff"
+          lateral:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "osaltpmdiff"
+              area: "areacello"
+          interfacial:
+            var: null
+            product:
+              var: null
+              tracer_content_tendency_per_unit_area: "osaltdiff"
+              area: "areacello"
       surface_exchange_flux:
-        var: "boundary_forcing_salt_tendency"
+        var:
+        product:
+          var: null
+          tracer_content_tendency_per_unit_area: "boundary_forcing_salt_tendency"
+          area: "areacello"
         sum:
           var: null
           nonadvective:
             var: null
             sum:
               var: null
-              basal: "sfdsi"
+              basal:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "sfdsi"
+                  area: "areacello"
           advective:
             var: null
             product:
@@ -208,6 +319,7 @@ salt:
               lambda_mass: 0.
               thickness_tendency: "boundary_forcing_h_tendency"
               density: 1035.
+              area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
         var: null
         product:
@@ -217,3 +329,4 @@ salt:
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
+          area: "areacello"

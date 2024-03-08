@@ -42,28 +42,34 @@ def collect_budgets(ds, budgets_dict):
                 budget_fill_dict(ds, v[part], f"{eq}_{part}")
 
 def budget_fill_dict(ds, bdict, namepath):
+    var_pref = None
+
     if ((bdict["var"] is not None) and
         (bdict["var"] in ds)       and
         (namepath not in ds)):
         var_rename = ds[bdict["var"]].rename(namepath)
         var_rename.attrs['provenance'] = bdict["var"]
         ds[namepath] = ds[bdict["var"]]
+        var_pref = ds[namepath]
 
     for k,v in bdict.items():
         if k in ['sum', 'product']:
             op_list = []
             for k_term, v_term in v.items():
-                if isinstance(v_term, numbers.Number):
+                if isinstance(v_term, dict): # recursive call to get this variable
+                    op_list.append(budget_fill_dict(ds, v_term, f"{namepath}_{k}_{k_term}"))
+                elif isinstance(v_term, numbers.Number):
                     op_list.append(v_term)
                 elif isinstance(v_term, str):
                     op_list.append(ds[v_term])
-                elif isinstance(v_term, dict):
-                    op_list.append(budget_fill_dict(ds, v_term, f"{namepath}_{k}_{k_term}"))
-                    
-            if len(op_list) == 0:
+
+            # Compute variable from sum or product operation
+            if (len(op_list) == 0) | all([e is None for e in op_list]):
                 return None
             else:
                 var = sum(op_list) if k=="sum" else reduce(mul, op_list, 1)
+
+            # Variable metadata
             var_name = f"{namepath}_{k}"
             var = var.rename(var_name)
             var_provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
@@ -71,13 +77,23 @@ def budget_fill_dict(ds, bdict, namepath):
             ds[var_name] = var
             if (bdict[k]["var"] is None):
                 bdict[k]["var"] = var_name
-                
-            if (bdict["var"] is None) and (namepath not in ds):
+
+            if (bdict["var"] is None):
                 var_copy = var.copy()
                 var_copy.attrs["provenance"] = var_name
-                ds[namepath] = var_copy
                 bdict["var"] = namepath
-            return var
+                if namepath not in ds:
+                    ds[namepath] = var_copy
+
+            # keep record of the first-listed variable
+            if var_pref is None:
+                var_pref = var.copy()
+                
+        if k == "difference": # PLACEHOLDER–NOT YET SUPPORTED
+            if var_pref is None:
+                var_pref = None
+
+    return var_pref
         
 def get_vars(b, terms, k_long=""):
     if isinstance(terms, (list, np.ndarray)):
