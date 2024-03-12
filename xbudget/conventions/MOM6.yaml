@@ -1,6 +1,7 @@
 ---
 mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
+  thickness: "thkcello"
   lhs:
     var: null
     sum:
