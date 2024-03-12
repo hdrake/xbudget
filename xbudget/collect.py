@@ -4,6 +4,7 @@ import copy
 import numpy as np
 import numbers
 import xarray as xr
+import xgcm
 
 def aggregate(budgets, decompose=[]):
     new_budgets = copy.deepcopy(budgets)
@@ -41,7 +42,14 @@ def collect_budgets(ds, budgets_dict):
             if part in v:
                 budget_fill_dict(ds, v[part], f"{eq}_{part}")
 
-def budget_fill_dict(ds, bdict, namepath):
+def budget_fill_dict(data, bdict, namepath):
+    if type(data)==xgcm.grid.Grid:
+        grid = data
+        ds = grid._ds
+    else:
+        ds = data
+        grid = None
+    
     var_pref = None
 
     if ((bdict["var"] is not None) and
@@ -57,7 +65,7 @@ def budget_fill_dict(ds, bdict, namepath):
             op_list = []
             for k_term, v_term in v.items():
                 if isinstance(v_term, dict): # recursive call to get this variable
-                    op_list.append(budget_fill_dict(ds, v_term, f"{namepath}_{k}_{k_term}"))
+                    op_list.append(budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}"))
                 elif isinstance(v_term, numbers.Number):
                     op_list.append(v_term)
                 elif isinstance(v_term, str):
@@ -89,9 +97,29 @@ def budget_fill_dict(ds, bdict, namepath):
             if var_pref is None:
                 var_pref = var.copy()
                 
-        if k == "difference": # PLACEHOLDER–NOT YET SUPPORTED
-            if var_pref is None:
-                var_pref = None
+        if k == "difference":
+            if grid is not None:
+                staggered_axes = {
+                    axn:c for axn,ax in grid.axes.items()
+                    for pos,c in ax.coords.items()
+                    if pos!="center"
+                }
+                v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
+                candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
+                if len(candidate_axes) == 1:
+                    axis = candidate_axes[0]
+                else:
+                    raise ValueError("Flux difference inconsistent with finite volume discretization.")
+                var = grid.diff(ds[v_term].fillna(0.), axis)
+                var_name = f"{namepath}_difference"
+                var = var.rename(var_name)
+                var_provenance = v_term
+                var.attrs["provenance"] = var_provenance
+                ds[var_name] = var
+                if var_pref is None:
+                    var_pref = var.copy()
+            else:
+                raise ValueError("Input `ds` must be `xgcm.Grid` instance if using `difference` operations.")
 
     return var_pref
         
