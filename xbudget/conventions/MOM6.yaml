@@ -58,7 +58,7 @@ mass: # finite-volume mass budget in units of kg/s
               density: 1035.
               area: "areacello"
       surface_exchange_flux:
-        var: null #"mass_rhs_sum_surface_exchange_flux_product" # == "wfo", but we overwrite it here so that the 3D "boundary_forcing_h_tendency" is preferentially used instead.
+        var: null
         product:
           var: null
           thickness_tendency: "boundary_forcing_h_tendency"
