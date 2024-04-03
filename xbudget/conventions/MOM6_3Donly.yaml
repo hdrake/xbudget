@@ -1,6 +1,7 @@
 ---
 mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
+  thickness: "thkcello"
   lhs:
     var: null
     sum:
@@ -22,11 +23,27 @@ mass: # finite-volume mass budget in units of kg/s
           var: null
           lateral:
             var: null
-            product:
+            sum:
               var: null
-              thickness_tendency: "dynamics_h_tendency"
-              density: 1035.
-              area: "areacello"
+              zonal_convergence:
+                var: null
+                product:
+                  var: null
+                  zonal_divergence:
+                    var: null
+                    difference:
+                      var: null
+                      zonal_mass_transport: "umo"
+                  sign: -1.
+              meridional_convergence:
+                var: null
+                product:
+                  var: null
+                  meridional_divergence:
+                    var: null
+                    difference:
+                      var: null
+                      meridional_mass_transport: "vmo"
           interfacial:
             var: null
             product:
