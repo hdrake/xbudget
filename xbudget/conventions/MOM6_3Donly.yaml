@@ -10,7 +10,7 @@ mass: # finite-volume mass budget in units of kg/s
         var: null
         product:
           var: null
-          thickness_tendency: "dhdt"
+          thickness_tendency: null
           density: 1035.
           area: "areacello"
   rhs:
@@ -122,7 +122,7 @@ heat: # finite-volume heat budget in units of J/s
               area: "areacello"
             
       surface_exchange_flux:
-        var:
+        var: null
         product:
           var: null
           tracer_content_tendency_per_unit_area: "boundary_forcing_heat_tendency"

@@ -1,0 +1,70 @@
+---
+mass: # finite-volume mass budget in units of kg/s
+  lambda: "density"
+  thickness: "thkcello"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+  rhs:
+    var: null
+    sum:
+      var: null
+      advection:
+        var: null
+      surface_exchange_flux:
+        var: null
+
+heat: # finite-volume heat budget in units of J/s
+  lambda: "thetao"
+  surface_lambda: "tos"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+      surface_ocean_flux_advective_negative_lhs:
+        var: null
+  rhs:
+    var: null
+    sum:
+      var: null
+      diffusion:
+        var: null 
+      surface_exchange_flux:
+        var: null
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+      bottom_flux:
+        var: null
+      frazil_ice:
+        var: null
+
+salt: # finite-volume salt budget in units of kg/s
+  lambda: "so"
+  surface_lambda: "sos"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+      advection:
+        var: null
+        sum:
+          var: null
+      surface_ocean_flux_advective_negative_lhs:
+        var: null
+  rhs:
+    var: null
+    sum:
+      var: null
+      diffusion:
+        var: null
+      surface_exchange_flux:
+        var: null
+      surface_ocean_flux_advective_negative_rhs:
+        var: null

@@ -206,7 +206,7 @@ heat: # finite-volume heat budget in units of J/s
                 #finite_difference:
                 #  Z: "rsdo"
           advective:
-            var:
+            var: null
             product:
               var: null
               tracer_content_tendency_per_unit_area: "heat_content_surfwater"
