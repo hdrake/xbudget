@@ -6,17 +6,115 @@ import numbers
 import xarray as xr
 import xgcm
 
-def aggregate(budgets, decompose=[]):
-    new_budgets = copy.deepcopy(budgets)
-    for tr,budget in budgets.items():
-        for part,terms in budget.items():
-            if part in ["lhs", "rhs"]:
-                new_budgets[tr][part] = deep_search(
-                    disaggregate(budget[part], decompose=decompose)
+def aggregate(xbudget_dict, decompose=[]):
+    """Aggregate xbudget dictionary into simpler root-level budgets.
+
+    Parameters
+    ----------
+    xbudget_dict : dictionary in xbudget-compatible format
+    decompose : str or list (default: [])
+        Name of variable type(s) to decompose into the summed parts
+
+    Examples
+    --------
+    >>> xbudget_dict = {
+        "heat": {
+            "rhs": {
+                "sum": {
+                    "advection": {
+                        "var":"advective_tendency"
+                    },
+                    "var": "heat_rhs_sum"
+                },
+                "var": "heat_rhs",
+            }
+        }
+    }
+    >>> xbudget.aggregate(xbudget_dict)
+    {'heat': {'rhs': {'advection': 'advective_tendency'}}}
+
+    >>>xbudget_dict = {
+        "heat": {
+            "rhs": {
+                "sum": {
+                    "advection": {
+                        "var":"advective_tendency",
+                        "sum": {
+                            "horizontal": {
+                                "var":"advective_tendency_h",
+                            },
+                            "vertical": {
+                                "var":"advective_tendency_v"
+                            },
+                            "var":"heat_rhs_sum_advection_sum"
+                        }
+                    },
+                    "var": "heat_rhs_sum"
+                },
+                "var": "heat_rhs",
+            }
+        }
+    }
+    >>> xbudget.aggregate(xbudget_dict)
+    {'heat': {'rhs': {'advection': 'advective_tendency'}}}
+
+    >>> xbudget.aggregate(xbudget_dict, decompose="advection")
+    {'heat': {'rhs': {'advection_horizontal': 'advective_tendency_h',
+    'advection_vertical': 'advective_tendency_v'}}}
+
+    See also
+    --------
+    disaggregate, deep_search, _deep_search
+    """
+    new_budgets = copy.deepcopy(xbudget_dict)
+    for tr, tr_xbudget_dict in xbudget_dict.items():
+        for side,terms in tr_xbudget_dict.items():
+            if side in ["lhs", "rhs"]:
+                new_budgets[tr][side] = deep_search(
+                    disaggregate(tr_xbudget_dict[side], decompose=decompose)
                 )
     return new_budgets
 
 def disaggregate(b, decompose=[]):
+    """Disaggregate variable's provenance dictionary into summed parts
+
+    Parameters
+    ----------
+    b : xbudget sub-dictionary for a variable
+    decompose : str or list (default: [])
+        Name of variable type(s) to decompose into the summed parts
+
+    Examples
+    --------
+    >>> b = {
+        "sum": {
+            "advection": {
+                "var":"advective_tendency",
+                "sum": {
+                    "horizontal": {
+                        "var":"advective_tendency_h",
+                    },
+                    "vertical": {
+                        "var":"advective_tendency_v"
+                    },
+                    "var":"heat_rhs_sum_advection_sum"
+                }
+            },
+            "var": "heat_rhs_sum"
+        },
+        "var": "heat_rhs",
+    }
+    >>> {'advection': 'advective_tendency'}
+    {'advection': 'advective_tendency'}
+
+    >>> xbudget.disaggregate(b, decompose="advection")
+    {'advection': {'horizontal': 'advective_tendency_h',
+    'vertical': 'advective_tendency_v'}}
+    
+    See also
+    --------
+    aggregate
+    """
     if "sum" in b:
         bsum_novar = {k:v for (k,v) in b["sum"].items() if (k!="var") and (v is not None)}
         sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
@@ -24,9 +122,21 @@ def disaggregate(b, decompose=[]):
     return b
 
 def deep_search(b):
+    """Utility function for searching for variables in xbudget dictionary.
+    
+    See also
+    --------
+    aggregate, _deep_search
+    """
     return _deep_search(b, new_b={}, k_last=None)
 
 def _deep_search(b, new_b={}, k_last=None):
+    """Recursive function for searching for variables in xbudget dictionary.
+    
+    See also
+    --------
+    aggregate, deep_search
+    """
     if type(b) is str:
         new_b[k_last] = b
     elif type(b) is dict:
@@ -36,13 +146,42 @@ def _deep_search(b, new_b={}, k_last=None):
             _deep_search(v, new_b=new_b, k_last=k)
         return new_b
 
-def collect_budgets(ds, budgets_dict):
-    for eq, v in budgets_dict.items():
-        for part in ["lhs", "rhs"]:
-            if part in v:
-                budget_fill_dict(ds, v[part], f"{eq}_{part}")
+def collect_budgets(ds, xbudget_dict):
+    """Fills xbudget dictionary with all tracer content tendencies
 
-def budget_fill_dict(data, bdict, namepath):
+    Parameters
+    ----------
+    ds : xr.Dataset containing budget diagnostics
+    xbudget_dict : dictionary in xbudget-compatible format
+        Example format:
+        >>> xbudget_dict = {
+            "heat": {
+                "rhs": {
+                    "sum": {
+                        "advection": {
+                            "var":"advective_tendency"
+                        },
+                        "var": "heat_rhs_sum"
+                    },
+                    "var": "heat_rhs",
+                }
+            }
+        }
+    """
+    for eq, v in xbudget_dict.items():
+        for side in ["lhs", "rhs"]:
+            if side in v:
+                budget_fill_dict(ds, v[side], f"{eq}_{side}")
+
+def budget_fill_dict(data, xbudget_dict, namepath):
+    """Recursively fill xbudget dictionary
+
+    Parameters
+    ----------
+    data : xgcm.grid or xr.Dataset
+    xbudget_dict : dictionary in xbudget-compatible format containing variable in namepath
+    namepath : name of variable in dataset (data._ds or data)
+    """
     if type(data)==xgcm.grid.Grid:
         grid = data
         ds = grid._ds
@@ -52,15 +191,15 @@ def budget_fill_dict(data, bdict, namepath):
     
     var_pref = None
 
-    if ((bdict["var"] is not None) and
-        (bdict["var"] in ds)       and
+    if ((xbudget_dict["var"] is not None) and
+        (xbudget_dict["var"] in ds)       and
         (namepath not in ds)):
-        var_rename = ds[bdict["var"]].rename(namepath)
-        var_rename.attrs['provenance'] = bdict["var"]
-        ds[namepath] = ds[bdict["var"]]
+        var_rename = ds[xbudget_dict["var"]].rename(namepath)
+        var_rename.attrs['provenance'] = xbudget_dict["var"]
+        ds[namepath] = ds[xbudget_dict["var"]]
         var_pref = ds[namepath]
 
-    for k,v in bdict.items():
+    for k,v in xbudget_dict.items():
         if k in ['sum', 'product']:
             op_list = []
             for k_term, v_term in v.items():
@@ -83,13 +222,13 @@ def budget_fill_dict(data, bdict, namepath):
             var_provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
             var.attrs["provenance"] = var_provenance
             ds[var_name] = var
-            if (bdict[k]["var"] is None):
-                bdict[k]["var"] = var_name
+            if (xbudget_dict[k]["var"] is None):
+                xbudget_dict[k]["var"] = var_name
 
-            if (bdict["var"] is None):
+            if (xbudget_dict["var"] is None):
                 var_copy = var.copy()
                 var_copy.attrs["provenance"] = var_name
-                bdict["var"] = namepath
+                xbudget_dict["var"] = namepath
                 if namepath not in ds:
                     ds[namepath] = var_copy
 
@@ -122,10 +261,50 @@ def budget_fill_dict(data, bdict, namepath):
                 raise ValueError("Input `ds` must be `xgcm.Grid` instance if using `difference` operations.")
 
     return var_pref
-        
-def get_vars(b, terms, k_long=""):
+
+def get_vars(xbudget_dict, terms):
+    """Get xbudget sub-dictionaries for specified terms.
+
+    Parameters
+    ----------
+    xbudget_dict : dictionary in xbudget-compatible format
+    terms : str or list of str
+
+    Examples
+    -------
+    >>> xbudget_dict = {
+        "heat": {
+            "rhs": {
+                "sum": {
+                    "advection": {
+                        "var":"advective_tendency"
+                    },
+                    "var": "heat_rhs_sum"
+                },
+                "var": "heat_rhs",
+            }
+        }
+    }
+    >>> xbudget.get_vars(xbudget_dict, "heat_rhs_sum")
+    {'var': 'heat_rhs_sum', 'sum': ['advective_tendency']}
+    """
+    return _get_vars(xbudget_dict, terms)
+
+def _get_vars(b, terms, k_long=""):
+    """Recursive version of _get_vars for determining variable provenance tree.
+    
+    Parameters
+    ----------
+    b : dictionary
+    terms : str or list of str
+    k_long : variable name suffix
+    
+    See also
+    --------
+    get_vars
+    """
     if isinstance(terms, (list, np.ndarray)):
-        return [get_vars(b, term) for term in terms]
+        return [_get_vars(b, term) for term in terms]
     elif type(terms) is str:
         for k,v in b.items():
             if type(v) is str:
@@ -157,7 +336,7 @@ def get_vars(b, terms, k_long=""):
                     new_k = k
                 elif len(k_long)>0:
                     new_k = f"{k_long}_{k}"
-                var = get_vars(v, terms, k_long=new_k)
+                var = _get_vars(v, terms, k_long=new_k)
                 if var is not None:
                     return var
 
@@ -170,4 +349,5 @@ def flatten(container):
             yield i
             
 def flatten_lol(lol):
+    """Flatten a list of lists into a single list."""
     return list(flatten(lol))
