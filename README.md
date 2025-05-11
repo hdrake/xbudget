@@ -13,9 +13,9 @@ pip install git+https://github.com/hdrake/xbudget.git@main
 ```bash
 git clone git@github.com:hdrake/xbudget.git
 cd xbudget
-conda env create -f ci/environment.yml
-conda activate test_env_xbudget
+conda env create -f docs/environment.yml
+conda activate docs_env_xbudget
 pip install -e .
-python -m ipykernel install --user --name test_env_xbudget --display-name "test_env_xbudget"
+python -m ipykernel install --user --name docs_env_xbudget --display-name "docs_env_xbudget"
 jupyter-lab
 ```

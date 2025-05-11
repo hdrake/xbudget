@@ -23,6 +23,11 @@ mass: # finite-volume mass budget in units of kg/s
           var: null
           lateral:
             var: null
+            product:
+              var: null
+              thickness_tendency: "dynamics_h_tendency"
+              density: 1035.
+              area: "areacello"
             sum:
               var: null
               zonal_convergence:
@@ -45,11 +50,6 @@ mass: # finite-volume mass budget in units of kg/s
                       var: null
                       meridional_mass_transport: "vmo"
                   sign: -1.
-            product:
-              var: null
-              thickness_tendency: "dynamics_h_tendency"
-              density: 1035.
-              area: "areacello"
           interfacial:
             var: null
             product:
@@ -95,6 +95,12 @@ mass: # finite-volume mass budget in units of kg/s
             product:
               var: null
               mass_tendency_per_unit_area: "ficeberg"
+              area: "areacello"
+          sea_ice_melt:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "fsitherm"
               area: "areacello"
           virtual_precip_restoring:
             var: null
