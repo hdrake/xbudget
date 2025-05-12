@@ -6,7 +6,7 @@ import xgcm
 
 def download_MOM6_example_data(file_name):
     # download the data
-    url = 'https://zenodo.org/record/15117174/files/'
+    url = 'https://zenodo.org/record/15384910/files/'
     destination_path = f"../data/{file_name}"
     if not os.path.exists(destination_path):
         print(f"File '{file_name}' being downloaded to {destination_path}.")
@@ -29,7 +29,7 @@ def load_MOM6_example_grid(file_name):
     return construct_grid(ds)
 
 def load_MOM6_coarsened_diagnostics():
-    file_name = 'MOM6_global_example_coarsened_diagnostics_zlevels.nc'
+    file_name = 'MOM6_global_example_diagnostics_zlevels_v0_0_6.nc'
     return load_MOM6_example_grid(file_name)
 
 def construct_grid(ds):
