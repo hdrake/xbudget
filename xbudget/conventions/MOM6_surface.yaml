@@ -1,0 +1,210 @@
+---
+mass: # finite-volume mass budget in units of kg/s
+  lambda: "density"
+  thickness: "thkcello"
+  lhs:
+    var: null
+  rhs:
+    var: null
+    sum:
+      var: null
+      surface_exchange_flux:
+        var: null
+        sum:
+          var: null
+          rain_and_ice:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "prlq"
+              area: "areacello"
+          snow:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "prsn"
+              area: "areacello"
+          evaporation:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "evs"
+              area: "areacello"
+          rivers:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "friver"
+              area: "areacello"
+          icebergs:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "ficeberg"
+              area: "areacello"
+          sea_ice_melt:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "fsitherm"
+              area: "areacello"
+          virtual_precip_restoring:
+            var: null
+            product:
+              var: null
+              mass_tendency_per_unit_area: "vprec"
+              area: "areacello"
+
+heat: # finite-volume heat budget in units of J/s
+  lambda: "thetao"
+  surface_lambda: "tos"
+  rhs:
+    var: null
+    sum:
+      var: null
+      surface_exchange_flux:
+        var:
+        sum:
+          var: null
+          nonadvective:
+            var: null
+            sum:
+              var: null
+              latent:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "hflso"
+                  area: "areacello"
+              sensible:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "hfsso"
+                  area: "areacello"
+              longwave:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "rlntds"
+                  area: "areacello"
+              shortwave:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "rsntds"
+                  area: "areacello"
+          advective:
+            var: null
+            product:
+              var: null
+              specific_heat_capacity: 3992.
+              lambda_mass: "tos"
+              mass_tendency_per_unit_area: "wfo"
+              area: "areacello"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        product:
+          var: null
+          sign: -1.
+          specific_heat_capacity: 3992.
+          lambda_mass: "tos"
+          mass_tendency_per_unit_area: "wfo"
+          area: "areacello"
+
+salt: # finite-volume salt budget in units of kg/s
+  lambda: "so"
+  surface_lambda: "sos"
+  rhs:
+    var: null
+    sum:
+      var: null
+      surface_exchange_flux:
+        var:
+        sum:
+          var: null
+          nonadvective:
+            var: null
+            sum:
+              var: null
+              basal:
+                var: null
+                product:
+                  var: null
+                  tracer_content_tendency_per_unit_area: "sfdsi"
+                  area: "areacello"
+          advective:
+            var: null
+            product:
+              var: null
+              unit_conversion: 0.001
+              lambda_mass: 0.
+              mass_tendency_per_unit_area: "wfo"
+              area: "areacello"
+      surface_ocean_flux_advective_negative_rhs:
+        var: null
+        sum:
+          var: null
+          rain_and_ice:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "prlq"
+              area: "areacello"
+          snow:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "prsn"
+              area: "areacello"
+          evaporation:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "evs"
+              area: "areacello"
+          rivers:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "friver"
+              area: "areacello"
+          icebergs:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "ficeberg"
+              area: "areacello"
+          sea_ice_melt:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "fsitherm"
+              area: "areacello"
+          virtual_precip_restoring:
+            var: null
+            product:
+              var: null
+              sign: -1.
+              unit_conversion: 0.001
+              lambda_mass: "sos"
+              mass_tendency_per_unit_area: "vprec"
+              area: "areacello"

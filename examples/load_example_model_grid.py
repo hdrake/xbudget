@@ -6,7 +6,7 @@ import xgcm
 
 def download_MOM6_example_data(file_name):
     # download the data
-    url = 'https://zenodo.org/record/15384910/files/'
+    url = 'https://zenodo.org/record/15420739/files/'
     destination_path = f"../data/{file_name}"
     if not os.path.exists(destination_path):
         print(f"File '{file_name}' being downloaded to {destination_path}.")
@@ -15,7 +15,6 @@ def download_MOM6_example_data(file_name):
         print(f"File '{file_name}' has completed download to {destination_path}.")
     else:
         print(f"File '{file_name}' already exists at {destination_path}. Skipping download.")
-
     return destination_path
 
 def load_MOM6_example_grid(file_name):

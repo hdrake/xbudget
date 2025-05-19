@@ -6,6 +6,8 @@ import numbers
 import xarray as xr
 import xgcm
 
+import warnings
+
 def aggregate(xbudget_dict, decompose=[]):
     """Aggregate xbudget dictionary into simpler root-level budgets.
 
@@ -204,17 +206,30 @@ def budget_fill_dict(data, xbudget_dict, namepath):
             op_list = []
             for k_term, v_term in v.items():
                 if isinstance(v_term, dict): # recursive call to get this variable
-                    op_list.append(budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}"))
+                    v_term_recursive = budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}")
+                    if v_term_recursive is not None:
+                        op_list.append(v_term_recursive)
                 elif isinstance(v_term, numbers.Number):
                     op_list.append(v_term)
                 elif isinstance(v_term, str):
-                    op_list.append(ds[v_term])
+                    if v_term in ds:
+                        op_list.append(ds[v_term])
+                    else:
+                        warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
+                        if k=="product":
+                            op_list.append(0.)
 
             # Compute variable from sum or product operation
-            if (len(op_list) == 0) | all([e is None for e in op_list]):
+            if (
+                (len(op_list) == 0) |
+                all([e is None for e in op_list]) |
+                any([e is None for e in op_list])
+            ):
                 return None
             else:
                 var = sum(op_list) if k=="sum" else reduce(mul, op_list, 1)
+                if not isinstance(var, xr.DataArray):
+                    continue
 
             # Variable metadata
             var_name = f"{namepath}_{k}"
@@ -244,6 +259,9 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                     if pos!="center"
                 }
                 v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
+                if v_term not in ds:
+                    warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
+                    continue
                 candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
                 if len(candidate_axes) == 1:
                     axis = candidate_axes[0]
