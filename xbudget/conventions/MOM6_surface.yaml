@@ -58,6 +58,8 @@ mass: # finite-volume mass budget in units of kg/s
 heat: # finite-volume heat budget in units of J/s
   lambda: "thetao"
   surface_lambda: "tos"
+  lhs:
+    var: null
   rhs:
     var: null
     sum:
@@ -115,6 +117,8 @@ heat: # finite-volume heat budget in units of J/s
 salt: # finite-volume salt budget in units of kg/s
   lambda: "so"
   surface_lambda: "sos"
+  lhs:
+    var: null
   rhs:
     var: null
     sum:

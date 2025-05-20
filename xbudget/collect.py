@@ -120,7 +120,17 @@ def disaggregate(b, decompose=[]):
     if "sum" in b:
         bsum_novar = {k:v for (k,v) in b["sum"].items() if (k!="var") and (v is not None)}
         sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
-        return {k:v if k not in decompose else disaggregate(b["sum"][k], decompose=decompose) for (k,v) in sum_dict.items()}
+        b_recurse = {}
+        for (k,v) in sum_dict.items():
+            if k not in decompose:
+                b_recurse[k] = v
+            else:
+                v_dict = disaggregate(b["sum"][k], decompose=decompose)
+                if "product" in v_dict.keys():
+                    b_recurse[k] = v_dict["var"]
+                else:
+                    b_recurse[k] = v_dict
+        return b_recurse
     return b
 
 def deep_search(b):
