@@ -6,7 +6,7 @@ authors = [
 ]
 description = "Helper functions and meta-data conventions for wrangling finite-volume ocean model budgets"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
