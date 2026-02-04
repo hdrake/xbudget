@@ -219,13 +219,15 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                     v_term_recursive = budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}")
                     if v_term_recursive is not None:
                         op_list.append(v_term_recursive)
+                    elif v_term.get("var") is not None and v_term.get("var") not in ds:
+                        warnings.warn(f"Variable {v_term.get('var')} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term.get('var')} from the `xbudget_dict`.", UserWarning)
                 elif isinstance(v_term, numbers.Number):
                     op_list.append(v_term)
                 elif isinstance(v_term, str):
                     if v_term in ds:
                         op_list.append(ds[v_term])
                     else:
-                        warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
+                        warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.", UserWarning)
                         if k=="product":
                             op_list.append(0.)
 
