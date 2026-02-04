@@ -6,7 +6,7 @@ Quick Start Guide
 
 **For users: minimal installation within an existing environment**
 ```bash
-pip install git+https://github.com/hdrake/xbudget.git@main
+pip install xbudget
 ```
 
 **For developers: installing from scratch using `conda`**
