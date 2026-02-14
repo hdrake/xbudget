@@ -5,6 +5,7 @@ import numpy as np
 import numbers
 import xarray as xr
 import xgcm
+from .llc90 import diff_2d_flux_llc90
 
 import warnings
 
@@ -269,7 +270,6 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                 warnings.warn(f"Variable {v_term['var']} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term['var']} from the `xbudget_dict`.")
                 continue
 
-            #A safe reciprocal that filters zeros out. 
             var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
 
             var_name = f"{namepath}_reciprocal"
@@ -284,6 +284,39 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                 xbudget_dict["var"] = namepath
                 if namepath not in ds:
                     ds[namepath] = var_copy
+            if var_pref is None:
+                var_pref = var.copy()
+
+        if k == "lateral_divergence":
+            if grid is None:
+                raise ValueError("Input `ds` must be `xgcm.Grid` instance if using `lateral_divergence` operations.")
+
+            Fx = budget_fill_dict(data, v["Fx"], f"{namepath}_Fx")
+            Fy = budget_fill_dict(data, v["Fy"], f"{namepath}_Fy")
+            if Fx is None or Fy is None:
+                warnings.warn(f"Could not compute fluxes for {namepath}, skipping.")
+                continue
+
+            if not hasattr(grid, "_face_connections"):
+                raise NotImplementedError("`lateral_divergence` operator is not implemented for grids without face connections.")
+            else:                    
+                div = diff_2d_flux_llc90(grid, Fx, Fy)
+                var = div["X"] + div["Y"]
+                
+            var_name = f"{namepath}_lateral_divergence"
+            var = var.rename(var_name)
+            var.attrs["provenance"] = f"diff_2d_flux_llc90(Fx={Fx.name}, Fy={Fy.name})"
+            ds[var_name] = var
+            if v["var"] is None:
+                v["var"] = var_name
+
+            if xbudget_dict["var"] is None:
+                var_copy = var.copy()
+                var_copy.attrs["provenance"] = var_name
+                xbudget_dict["var"] = namepath
+                if namepath not in ds:
+                    ds[namepath] = var_copy
+            
             if var_pref is None:
                 var_pref = var.copy()
 
