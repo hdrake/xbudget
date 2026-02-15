@@ -262,7 +262,31 @@ def budget_fill_dict(data, xbudget_dict, namepath):
             # keep record of the first-listed variable
             if var_pref is None:
                 var_pref = var.copy()
-                
+        
+        if k == "reciprocal":
+            v_term = [v_term for k_term, v_term in v.items() if k_term != "var"][0]
+            if v_term['var'] not in ds:
+                warnings.warn(f"Variable {v_term['var']} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term['var']} from the `xbudget_dict`.")
+                continue
+
+            #A safe reciprocal that filters zeros out. 
+            var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
+
+            var_name = f"{namepath}_reciprocal"
+            var = var.rename(var_name)
+            var.attrs["provenance"] = v_term['var']
+            ds[var_name] = var
+            if v['var'] is None:
+                v['var'] = var_name
+            if xbudget_dict["var"] is None:
+                var_copy = var.copy()
+                var_copy.attrs["provenance"] = var_name
+                xbudget_dict["var"] = namepath
+                if namepath not in ds:
+                    ds[namepath] = var_copy
+            if var_pref is None:
+                var_pref = var.copy()
+
         if k == "difference":
             if grid is not None:
                 staggered_axes = {

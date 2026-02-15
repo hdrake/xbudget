@@ -382,6 +382,26 @@ class TestBudgetFillDict:
         # Check that product is correct (2.0 * 3.0 = 6.0)
         assert np.allclose(ds["heat_rhs_product"].values, 6.0)
 
+    def test_budget_fill_dict_reciprocal_operation(self):
+        """Test budget_fill_dict with reciprocal operation, including zero division"""
+        ds = xr.Dataset({
+            "var_to_invert": xr.DataArray([1.0, 0.0, 3.0], dims=("x",)),
+        }, coords={"x": [0, 1, 2]})
+        
+        xbudget_dict = {
+            "var": None,
+            "reciprocal": {
+                "inverted_var": {"var": "var_to_invert"},
+                "var": None,
+            }
+        }
+        
+        result = budget_fill_dict(ds, xbudget_dict, "heat_rhs")
+        assert result is not None
+        assert "heat_rhs_reciprocal" in ds
+        expected = np.array([1.0, 0.0, 1.0/3.0])
+        assert np.allclose(ds["heat_rhs_reciprocal"].values, expected)
+
     def test_budget_fill_dict_missing_variable_warning(self):
         """Test that missing variables generate warnings"""
         ds = xr.Dataset({
