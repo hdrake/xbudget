@@ -270,6 +270,7 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                 warnings.warn(f"Variable {v_term['var']} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term['var']} from the `xbudget_dict`.")
                 continue
 
+            #A safe reciprocal that filters zeros out. 
             var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
 
             var_name = f"{namepath}_reciprocal"
