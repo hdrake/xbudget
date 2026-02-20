@@ -64,8 +64,14 @@ _sync_examples()
 
 html_title = f"{project} v{version} documentation"
 
-html_theme = 'alabaster'
-html_static_path = ['_static']
+html_theme = "alabaster"
+
+html_theme_options = {
+    "sidebar_width": "270px",
+}
+
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
 latex_documents = [
     ("index")
