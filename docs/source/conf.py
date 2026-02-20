@@ -3,15 +3,18 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+# The master toctree document.
+master_doc = "index"
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+
 
 project = 'xbudget'
 copyright = '2026, Henri Drake'
 author = 'Henri Drake'
 
 from importlib.metadata import version as get_version
-
 release = get_version(project)
 version = ".".join(release.split(".")[:2])
 
@@ -26,5 +29,11 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
+html_title = f"{project} v{version} documentation"
+
 html_theme = 'alabaster'
 html_static_path = ['_static']
+
+latex_documents = [
+    ("index")
+]
