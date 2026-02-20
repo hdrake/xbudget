@@ -2,7 +2,7 @@ name: docs_env_xbudget
 channels:
   - conda-forge
 dependencies:
-  - python==3.12
+  - python=3.12
   - cftime
   - ipython
   - jupyterlab
