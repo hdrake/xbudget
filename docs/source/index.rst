@@ -12,3 +12,4 @@ documentation for details.
    :caption: Contents:
 
    installation
+   examples/MOM6_budget_examples_mass_heat_salt

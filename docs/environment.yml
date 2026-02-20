@@ -11,4 +11,6 @@ dependencies:
   - pydap
   - pytest
   - sphinx
+  - nbsphinx
+  - ipykernel
   - pip

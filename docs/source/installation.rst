@@ -5,7 +5,7 @@ Installation
 Requirements
 ^^^^^^^^^^^^
 
-xbudget is compatible with python 3 (>= version 3.11). It requires xgcm_
+xbudget is compatible with python 3 (>= version 3.11). It requires xgcm
 (>= version 0.9.0).
 
 Installation from Conda Forge
