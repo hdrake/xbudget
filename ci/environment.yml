@@ -1,6 +1,7 @@
 name: test_env_xbudget
 channels:
   - conda-forge
+  - nodefaults
 dependencies:
   - python>=3.12
   - cftime
