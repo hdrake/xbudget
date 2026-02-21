@@ -1,11 +1,14 @@
 xbudget: easy handling of budgets diagnosed from General Circulation Models with xarray
 =========================
 
-|pypi| |conda forge| |conda-forge| |Build Status| |docs| |license|
+[![PyPI](https://badge.fury.io/py/xbudget.svg)](https://badge.fury.io/py/xbudget)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/xbudget)](https://anaconda.org/conda-forge/xbudget)
+[![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/xbudget?label=conda-forge)](https://anaconda.org/conda-forge/xbudget)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/hdrake/xbudget/CI.yml?logo=github)](https://github.com/hdrake/xbudget/actions)
+[![Docs](https://readthedocs.org/projects/xbudget/badge/?version=latest)](https://xbudget.readthedocs.io/en/latest/)
+[![License](https://img.shields.io/github/license/hdrake/xbudget)](https://github.com/hdrake/xbudget)
 
-Quick Start Guide
------------------
-
+## Quick Start Guide
 **For users: minimal installation within an existing environment**
 ```bash
 pip install xbudget
@@ -21,20 +24,3 @@ pip install -e .
 python -m ipykernel install --user --name docs_env_xbudget --display-name "docs_env_xbudget"
 jupyter-lab
 ```
-
-.. |conda forge| image:: https://img.shields.io/conda/vn/conda-forge/xbudget
-   :target: https://anaconda.org/conda-forge/xbudget
-.. |Build Status| image:: https://img.shields.io/github/workflow/status/hdrake/xbudget/CI?logo=github
-   :target: https://github.com/hdrake/xbudget/actions
-   :alt: GitHub Workflow CI Status
-.. |pypi| image:: https://badge.fury.io/py/xbudget.svg
-   :target: https://badge.fury.io/py/xbudget
-   :alt: pypi package
-.. |docs| image:: http://readthedocs.org/projects/xbudget/badge/?version=latest
-   :target: http://xgcm.readthedocs.org/en/latest/?badge=latest
-   :alt: documentation status
-.. |license| image:: https://img.shields.io/github/license/mashape/apistatus.svg
-   :target: https://github.com/hdrake/xbudget
-   :alt: license
-.. |conda-forge| image:: https://img.shields.io/conda/dn/conda-forge/xbudget?label=conda-forge
-   :target: https://anaconda.org/conda-forge/xbudget
