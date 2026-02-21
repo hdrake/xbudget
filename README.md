@@ -1,12 +1,15 @@
-# xbudget
-Helper functions and meta-data conventions for wrangling finite-volume ocean model budgets.
+xbudget: easy handling of budgets diagnosed from General Circulation Models with xarray
+=========================
 
-Quick Start Guide
------------------
+[![PyPI](https://badge.fury.io/py/xbudget.svg)](https://badge.fury.io/py/xbudget)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/xbudget)](https://anaconda.org/conda-forge/xbudget)
+[![Docs](https://readthedocs.org/projects/xbudget/badge/?version=latest)](https://xbudget.readthedocs.io/en/latest/)
+[![License](https://img.shields.io/github/license/hdrake/xbudget)](https://github.com/hdrake/xbudget)
 
+## Quick Start Guide
 **For users: minimal installation within an existing environment**
 ```bash
-pip install xbudget
+conda install xbudget
 ```
 
 **For developers: installing from scratch using `conda`**
