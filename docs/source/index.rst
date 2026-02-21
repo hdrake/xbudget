@@ -1,6 +1,6 @@
 
 xbudget: easy handling of budgets diagnosed from General Circulation Models with xarray
-=====================
+========================================================================================
 
 *xbudget* is a python package that facilitates the handling of budget diagnostics for finite-volume General Circulation Models (currently only supporting structured grids).
 
