@@ -3,8 +3,6 @@ xbudget: easy handling of budgets diagnosed from General Circulation Models with
 
 [![PyPI](https://badge.fury.io/py/xbudget.svg)](https://badge.fury.io/py/xbudget)
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/xbudget)](https://anaconda.org/conda-forge/xbudget)
-[![Conda Downloads](https://img.shields.io/conda/dn/conda-forge/xbudget?label=conda-forge)](https://anaconda.org/conda-forge/xbudget)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/hdrake/xbudget/CI.yml?logo=github)](https://github.com/hdrake/xbudget/actions)
 [![Docs](https://readthedocs.org/projects/xbudget/badge/?version=latest)](https://xbudget.readthedocs.io/en/latest/)
 [![License](https://img.shields.io/github/license/hdrake/xbudget)](https://github.com/hdrake/xbudget)
 
