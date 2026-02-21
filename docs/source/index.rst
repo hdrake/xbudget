@@ -13,7 +13,7 @@ where :math:`\lambda` is the property density (or tracer concentration), :math:`
 
 xbudget ingests an `xgcm.Grid` object containing the budget diagnostics and uses structured metadata, in the form of a nested dictionary (or `.yaml` file), to close such budgets. While this may seem trivial for use cases in which there is a single flux to keep track of, total non-advective fluxes in general circulation models can be composed of dozens of contributing processes. Since budget diagnostics are often not output as volume-integrated tendencies, xbudget allows for terms to be derived as sums, products, or differences (or some combination of these). For example, ocean heat tendency due to air-sea heat fluxes might be derived from the difference between vertical heat fluxes across depth interfaces, summed over longwave, shortwave, sensible, and latent components of the flux, and multiplied by the ocean cell area.
 
-While drafting a `.yaml` file from scratch for a new model can be daunting, it only needs to be done once and then handling the budgets becomes trivially easy.
+While drafting a `.yaml` file from scratch for a new model can be daunting, it only needs to be done once -- then closing budgets is a breeze!
 
 .. toctree::
    :maxdepth: 2
