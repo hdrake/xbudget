@@ -25,6 +25,7 @@ def load_MOM6_example_grid(file_name):
             "z_l":xr.DataArray([3000], dims=("z_l",)),
             "z_i":xr.DataArray([0,6000], dims=("z_i",))
         })
+    ds = ds.chunk({"xh":100, "yh":100, "xq":100, "yq":100, "time":1}) # Chunk up the data to make it more like a user's typical dataset
     return construct_grid(ds)
 
 def load_MOM6_coarsened_diagnostics():

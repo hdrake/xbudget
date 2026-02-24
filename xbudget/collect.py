@@ -304,29 +304,29 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             if len(candidate_axes) == 1:
                 axis = candidate_axes[0]
             else:
-                raise ValueError("Flux difference inconsistent with finite volume discretization.")
+                raise ValueError("Finite difference inconsistent with finite volume discretization.")
 
-            if allow_rechunk: #NEW CODE
-                    try: #extract original chunks when possible
-                        #not using ds[v_term] since it may not have the non-staggered dimension chunks. 
-                        original_chunks = dict(ds.chunksizes)
-                    except Exception:
-                        warnings.warn("Dataset chunks are inconsistent; using unify_chunks()", UserWarning)
-                        original_chunks = dict(ds.unify_chunks().chunksizes)
+            if allow_rechunk:
+                try: #extract original chunks when possible
+                    #not using ds[v_term] since it may not have the non-staggered dimension chunks. 
+                    original_chunks = dict(ds.chunksizes)
+                except Exception:
+                    warnings.warn("Dataset chunks are inconsistent; using unify_chunks()", UserWarning)
+                    original_chunks = dict(ds.unify_chunks().chunksizes)
 
-                    # Find the staggered dimension for the given axis in the DataArray
-                    axis_dim = [d for d in ds[v_term].dims if d in grid.axes[axis].coords.values()]
-                    if len(axis_dim) != 1:
-                        raise ValueError(f"Expected to find one dimension for axis '{axis}' in variable '{v_term}', but found {len(dims_for_axis)}: {dims_for_axis}")
-                    axis_dim = axis_dim[0]
-                
-                    # Temporarily rechunk to put the difference dim in a single chunk, all other chunks are auto. 
-                    temporary_chunks = {axis_dim: -1, **{d: "auto" for d in ds[v_term].dims if d != axis_dim}}
-                    var = grid.diff(ds[v_term].chunk(temporary_chunks).fillna(0.0), axis=axis)
-                    # Attempt original chunking for preserved dimensions
-                    var = var.chunk({d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims})
-            else:  #OLD CODE
-                    var = grid.diff(ds[v_term].fillna(0.), axis)
+                # Find the staggered dimension for the given axis in the DataArray
+                axis_dim = [d for d in ds[v_term].dims if d in grid.axes[axis].coords.values()]
+                if len(axis_dim) != 1:
+                    raise ValueError(f"Expected to find one dimension for axis '{axis}' in variable '{v_term}', but found {len(axis_dim)}: {axis_dim}")
+                axis_dim = axis_dim[0]
+            
+                # Temporarily rechunk to put the difference dim in a single chunk, all other chunks are auto.
+                temporary_chunks = {axis_dim: -1, **{d: "auto" for d in ds[v_term].dims if d != axis_dim}}
+                var = grid.diff(ds[v_term].chunk(temporary_chunks).fillna(0.0), axis=axis)
+                # Attempt original chunking for preserved dimensions
+                var = var.chunk({d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims})
+            else:
+                var = grid.diff(ds[v_term].fillna(0.), axis)
 
             var_name = f"{namepath}_difference"
             var = var.rename(var_name)
