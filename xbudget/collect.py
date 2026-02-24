@@ -179,6 +179,10 @@ def collect_budgets(ds, xbudget_dict, allow_rechunk = True):
                 }
             }
         }
+    allow_rechunk : bool (default: True)
+        Whether to temporarily rechunk when taking differences along a dimension,
+        e.g. to compute flux divergences on `center` from fluxes on `outer` or
+        tendencies on `center` from snapshots on `outer`.
     """
     for eq, v in xbudget_dict.items():
         for side in ["lhs", "rhs"]:
@@ -193,6 +197,10 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
     data : xgcm.grid or xr.Dataset
     xbudget_dict : dictionary in xbudget-compatible format containing variable in namepath
     namepath : name of variable in dataset (data._ds or data)
+    allow_rechunk : bool (default: True)
+        Whether to temporarily rechunk when taking differences along a dimension,
+        e.g. to compute flux divergences on `center` from fluxes on `outer` or
+        tendencies on `center` from snapshots on `outer`.
     """
     if type(data)==xgcm.grid.Grid:
         grid = data
