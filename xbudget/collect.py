@@ -158,7 +158,7 @@ def _deep_search(b, new_b={}, k_last=None):
             _deep_search(v, new_b=new_b, k_last=k)
         return new_b
 
-def collect_budgets(ds, xbudget_dict):
+def collect_budgets(ds, xbudget_dict, allow_rechunk = True):
     """Fills xbudget dictionary with all tracer content tendencies
 
     Parameters
@@ -183,9 +183,9 @@ def collect_budgets(ds, xbudget_dict):
     for eq, v in xbudget_dict.items():
         for side in ["lhs", "rhs"]:
             if side in v:
-                budget_fill_dict(ds, v[side], f"{eq}_{side}")
+                budget_fill_dict(ds, v[side], f"{eq}_{side}", allow_rechunk = allow_rechunk)
 
-def budget_fill_dict(data, xbudget_dict, namepath):
+def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
     """Recursively fill xbudget dictionary
 
     Parameters
@@ -216,7 +216,7 @@ def budget_fill_dict(data, xbudget_dict, namepath):
             op_list = []
             for k_term, v_term in v.items():
                 if isinstance(v_term, dict): # recursive call to get this variable
-                    v_term_recursive = budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}")
+                    v_term_recursive = budget_fill_dict(data, v_term, f"{namepath}_{k}_{k_term}", allow_rechunk = allow_rechunk)
                     if v_term_recursive is not None:
                         op_list.append(v_term_recursive)
                     elif v_term.get("var") is not None and v_term.get("var") not in ds:
@@ -287,6 +287,7 @@ def budget_fill_dict(data, xbudget_dict, namepath):
             if var_pref is None:
                 var_pref = var.copy()
 
+        
         if k == "difference":
             if grid is not None:
                 staggered_axes = {
@@ -294,25 +295,50 @@ def budget_fill_dict(data, xbudget_dict, namepath):
                     for pos,c in ax.coords.items()
                     if pos!="center"
                 }
-                v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
-                if v_term not in ds:
-                    warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
-                    continue
-                candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
-                if len(candidate_axes) == 1:
-                    axis = candidate_axes[0]
-                else:
-                    raise ValueError("Flux difference inconsistent with finite volume discretization.")
-                var = grid.diff(ds[v_term].fillna(0.), axis)
-                var_name = f"{namepath}_difference"
-                var = var.rename(var_name)
-                var_provenance = v_term
-                var.attrs["provenance"] = var_provenance
-                ds[var_name] = var
-                if var_pref is None:
-                    var_pref = var.copy()
+            v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
+            if v_term not in ds:
+                warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
+                continue
+
+            candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
+            if len(candidate_axes) == 1:
+                axis = candidate_axes[0]
+            else:
+                raise ValueError("Flux difference inconsistent with finite volume discretization.")
+
+            if allow_rechunk: #NEW CODE
+                    try: #extract original chunks when possible
+                        #not using ds[v_term] since it may not have the non-staggered dimension chunks. 
+                        original_chunks = dict(ds.chunksizes)
+                    except Exception:
+                        warnings.warn("Dataset chunks are inconsistent; using unify_chunks()", UserWarning)
+                        original_chunks = dict(ds.unify_chunks().chunksizes)
+
+                    # Find the staggered dimension for the given axis in the DataArray
+                    axis_dim = [d for d in ds[v_term].dims if d in grid.axes[axis].coords.values()]
+                    if len(axis_dim) != 1:
+                        raise ValueError(f"Expected to find one dimension for axis '{axis}' in variable '{v_term}', but found {len(dims_for_axis)}: {dims_for_axis}")
+                    axis_dim = axis_dim[0]
+                
+                    # Temporarily rechunk to put the difference dim in a single chunk, all other chunks are auto. 
+                    temporary_chunks = {axis_dim: -1, **{d: "auto" for d in ds[v_term].dims if d != axis_dim}}
+                    var = grid.diff(ds[v_term].chunk(temporary_chunks).fillna(0.0), axis=axis)
+                    # Attempt original chunking for preserved dimensions
+                    var = var.chunk({d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims})
+            else:  #OLD CODE
+                    var = grid.diff(ds[v_term].fillna(0.), axis)
+
+            var_name = f"{namepath}_difference"
+            var = var.rename(var_name)
+            var_provenance = v_term
+            var.attrs["provenance"] = var_provenance
+            ds[var_name] = var
+            if var_pref is None:
+                var_pref = var.copy()
             else:
                 raise ValueError("Input `ds` must be `xgcm.Grid` instance if using `difference` operations.")
+
+
 
     return var_pref
 
