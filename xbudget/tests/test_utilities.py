@@ -2,6 +2,8 @@ import pytest
 import numpy as np
 import xarray as xr
 import copy
+import xgcm
+import dask.array as da
 from xbudget.collect import (
     aggregate,
     disaggregate,
@@ -438,3 +440,67 @@ class TestBudgetFillDict:
         result = budget_fill_dict(ds, xbudget_dict, "heat_rhs")
         assert result is not None
         assert np.allclose(ds["heat_rhs_product"].values, 2.0)
+
+    def test_budget_fill_dict_allow_rechunk(self):
+        """Test the allow_rechunk option for the difference operation."""
+        # Create a dataset with non-uniform chunks on the staggered grid,
+        # which would cause issues for xgcm.grid.diff
+        flux_data = da.from_array(np.random.rand(5, 3), chunks=((2, 2, 1), 3))
+        ds_chunked = xr.Dataset(
+            {
+                "var": xr.DataArray(
+                    flux_data,
+                    dims=("x_g", "y_c"),
+                )
+            },
+            coords={
+                "x_g": np.arange(5),
+                "x_c": np.arange(4) + 0.5,
+                "y_c": np.arange(3),
+            },
+        )
+
+        grid_params = {
+            "coords": {"X": {"center": "x_c", "left": "x_g"}},
+            "periodic": False,
+            "autoparse_metadata": False,
+        }
+
+        xbudget_dict = {
+            "var": None,
+            "difference": {"var_diff": "var", "var": None},
+        }
+
+        # 1. Test that allow_rechunk=False raises an error when passing a chunked 
+        # dataset through budget_fill_dict
+        with pytest.raises(ValueError):
+            grid_fail = xgcm.Grid(ds_chunked.copy(deep=True), **grid_params)
+            budget_fill_dict(
+                grid_fail,
+                copy.deepcopy(xbudget_dict),
+                "tendency_rhs",
+                allow_rechunk=False,
+            )
+
+        # 2. Test that shows allow_rechunk=True works
+        grid_success = xgcm.Grid(ds_chunked.copy(deep=True), **grid_params)
+        budget_fill_dict(
+            grid_success,
+            copy.deepcopy(xbudget_dict),
+            "tendency_rhs",
+            allow_rechunk=True,
+        )
+        tendency_rechunked = grid_success._ds["tendency_rhs_difference"]
+
+        # 3. Compare with a correct result from an unchunked array
+        grid_unchunked = xgcm.Grid(ds_chunked.chunk(-1), **grid_params)
+        budget_fill_dict(
+            grid_unchunked,
+            copy.deepcopy(xbudget_dict),
+            "tendency_rhs",
+            allow_rechunk=False,
+        )
+        tendency_correct = grid_unchunked._ds["tendency_rhs_difference"]
+
+        # The numerical results should be identical
+        xr.testing.assert_allclose(tendency_rechunked, tendency_correct)
