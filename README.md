@@ -9,7 +9,7 @@ xbudget: easy handling of budgets diagnosed from General Circulation Models with
 ## Quick Start Guide
 **For users: minimal installation within an existing environment**
 ```bash
-conda install xbudget
+conda install -c conda-forge xbudget
 ```
 
 **For developers: installing from scratch using `conda`**
