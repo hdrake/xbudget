@@ -5,7 +5,7 @@ import numpy as np
 import numbers
 import xarray as xr
 import xgcm
-from .llc90 import *
+from .llc90 import diff_2d_flux_llc90
 
 import warnings
 
