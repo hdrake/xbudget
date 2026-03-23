@@ -1,5 +1,31 @@
 import xarray as xr
+import urllib.request
+import shutil
+import os
+import xarray as xr
 import xgcm
+
+def download_ECCOV4r4_example_data(file_name):
+    # download the data
+    url = 'https://zenodo.org/records/19196611/files/'
+    destination_path = f"../data/{file_name}"
+    if not os.path.exists(destination_path):
+        print(f"File '{file_name}' being downloaded to {destination_path}.")
+        with urllib.request.urlopen(url + file_name) as response, open(destination_path, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+        print(f"File '{file_name}' has completed download to {destination_path}.")
+    else:
+        print(f"File '{file_name}' already exists at {destination_path}. Skipping download.")
+    return destination_path
+
+def load_ECCOV4r4_example_grid(file_name):
+    destination_path = download_ECCOV4r4_example_data(file_name)
+    ds = xr.open_dataset(destination_path).fillna(0.)
+    return construct_grid(ds)
+
+def load_ECCOV4r4_coarsened_diagnostics():
+    file_name = 'ECCO_budget_terms.nc'
+    return load_ECCOV4r4_example_grid(file_name)
 
 def construct_grid(ds):
     # define the connectivity between faces

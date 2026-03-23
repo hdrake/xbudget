@@ -3,44 +3,6 @@ import xarray as xr
 
 
 def calc_llc90_geothermal_heatflux_tendency(ds):
-    def download_LLC90_geothermal_fluxes(ds):
-        import os
-        import tempfile
-        import requests
-        import ecco_v4_py as ecco
-
-        url = "https://github.com/ECCO-GROUP/ECCO-v4-Python-Tutorial/raw/master/misc/geothermalFlux.bin"
-
-        with tempfile.TemporaryDirectory() as td:
-            fp = os.path.join(td, "geothermalFlux.bin")
-
-            with requests.get(url, stream=True, timeout=300) as r:
-                r.raise_for_status()
-                with open(fp, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-
-            geoflx = ecco.read_llc_to_tiles(td, "geothermalFlux.bin")
-
-            # Convert numpy array to an xarray DataArray with matching dimensions as the monthly mean fields
-            geoflx_llc = xr.DataArray(
-                geoflx,
-                coords={"tile": ds.tile.values, "j": ds.j.values, "i": ds.i.values},
-                dims=["tile", "j", "i"],
-            )
-            geoflx_llc.attrs = {
-                "standard_name": "geothermalFlux",
-                "long_name": "2D Geothermal heat flux",
-                "units": "W/m^2",
-            }
-
-        ds["geothermalFlux"] = geoflx_llc  # TODO: set as a coord
-
-    if "geothermalFlux" not in ds:
-        print("geothermalFlux not found, retrieving from GitHub...")
-        download_LLC90_geothermal_fluxes(ds)
-
     geoflx_llc = ds["geothermalFlux"].copy(deep=True)
 
     volcello = ds["drF"] * ds["hFacC"] * ds["rA"]
