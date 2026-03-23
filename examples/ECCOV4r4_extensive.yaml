@@ -41,7 +41,7 @@ mass: # finite-volume mass budget in units of kg/s
             var: null
             sum:
               var: null
-              mass_flux_convergence: # div(-Fx,-Fy) = -div(Fx,Fy)
+              eulerian_mass_flux_convergence: # div(-Fx,-Fy) = -div(Fx,Fy)
                 var: null
                 product: 
                   var: null 
@@ -57,15 +57,42 @@ mass: # finite-volume mass budget in units of kg/s
                       Fy:
                         var: null
                         product: {var: null, v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+              bolus_mass_flux_convergence: 
+                  var: null 
+                  sign: -1.0
+                  density: 1029.0
+                  volume_flux_divergence: 
+                    var: null
+                    lateral_divergence:
+                      var: null
+                      Fx:
+                        var: null
+                        product: {var: null, u_velocity: "UVELSTAR", dyG: "dyG", dz: "drF"}
+                      Fy:
+                        var: null
+                        product: {var: null, v_velocity: "VVELSTAR", dxG: "dxG", dz: "drF"}
           interfacial:
             var: null
-            product:
-              var: null
-              volume_flux_convergence:
-                var: null
-                difference: {var: null, w_velocity: "WVELMASS_interior"} #precomputed. WVELMESS includes freshwater fluxes
-              density: 1029.0
-              area: "rA"
+            sum: 
+              var: null 
+              eulerian_mass_flux_convergence:
+                var: null 
+                product:
+                  var: null
+                  volume_flux_convergence:
+                    var: null
+                    difference: {var: null, w_velocity: "WVELMASS_interior"} #precomputed. WVELMESS includes freshwater fluxes
+                  density: 1029.0
+                  area: "rA"
+              bolus_mass_flux_convergence:
+                var: null 
+                product:
+                  var: null
+                  volume_flux_convergence:
+                    var: null
+                    difference: {var: null, w_velocity: "WVELSTAR"} #precomputed. WVELMESS includes freshwater fluxes
+                  density: 1029.0
+                  area: "rA"
       surface_exchange_flux:
         var: null
         product:
