@@ -1,0 +1,346 @@
+---
+mass: # finite-volume mass budget in units of kg/s
+  lambda: "density"
+  thickness: "thkcello"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          volume_tendency:
+            var: null
+            product:
+              var: null
+              free_surface_tendency:
+                var: null
+                product:
+                  var: null
+                  deta:
+                    var: null
+                    difference: {var: null, etan: "ETAN_bounds"}
+                  dt_inv:
+                    var: null
+                    reciprocal: {var: null, dt: {var: "dt"}}
+              volume: "volcello"
+              deptho_inv:
+                var: null
+                reciprocal: {var: null, deptho: {var: "Depth"}}
+          density: 1029.0
+  rhs:
+    var: null
+    sum:
+      var: null
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            sum:
+              var: null
+              mass_flux_convergence: # div(-Fx,-Fy) = -div(Fx,Fy)
+                var: null
+                product: 
+                  var: null 
+                  sign: -1.0
+                  density: 1029.0
+                  volume_flux_divergence: 
+                    var: null
+                    lateral_divergence:
+                      var: null
+                      Fx:
+                        var: null
+                        product: {var: null, u_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
+                      Fy:
+                        var: null
+                        product: {var: null, v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+          interfacial:
+            var: null
+            product:
+              var: null
+              volume_flux_convergence:
+                var: null
+                difference: {var: null, w_velocity: "WVELMASS_interior"} #precomputed. WVELMESS includes freshwater fluxes
+              density: 1029.0
+              area: "rA"
+      surface_exchange_flux:
+        var: null
+        product:
+          var: null
+          mass_tendency_per_unit_area: "oceFWflx_3d"
+          sign: 1.0
+          area: "rA"
+
+heat: # finite-volume heat budget in s* in units of J/s (W)
+  lambda: "THETA"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          volume: "volcello"
+          dtheta_sstar_dt:
+            var: null
+            product:
+              var: null
+              dt_inv:
+                var: null
+                reciprocal:
+                  var: null
+                  dt:
+                    var: "dt"
+              dtheta_sstar:
+                var: null
+                difference:
+                  var: null
+                  theta_sstar:
+                    var: null
+                    product: 
+                      var: null
+                      theta: "THETA_bounds"
+                      sstar:
+                        var: null
+                        sum:
+                          var: null
+                          one: 1.0
+                          eta_over_depth:
+                            var: null
+                            product:
+                              var: null
+                              eta: "ETAN_bounds"
+                              deptho_inv:
+                                var: null
+                                reciprocal: 
+                                  var: null
+                                  deptho:
+                                    var: "Depth"
+  rhs:
+    var: null
+    sum:
+      var: null
+      advection:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                var: null
+                product:
+                  var: null
+                  heat_flux_divergence:
+                    var: null
+                    lateral_divergence:
+                      var: null
+                      Fx:
+                        var: null
+                        product: {var: null, advx_th: "ADVx_TH"}
+                      Fy:
+                        var: null
+                        product: {var: null, advy_th: "ADVy_TH"}
+                  sign: -1.0
+          interfacial:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                var: null
+                difference: {var: null, advr_th: "ADVr_TH"}
+      diffusion:
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              explicit_heat_flux_convergence:
+                var: null
+                product:
+                  var: null
+                  heat_flux_divergence:
+                    var: null 
+                    lateral_divergence:
+                      var: null
+                      Fx:
+                        var: null
+                        product:
+                          var: null
+                          dfx_th: "DFxE_TH"
+                      Fy:
+                        var: null
+                        product:
+                          var: null
+                          dfy_th: "DFyE_TH"
+                  sign: -1.0
+          explicit_vertical_diffusion:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                var: null
+                difference: {var: null, dfrE_th: "DFrE_TH"}
+          implicit_vertical_diffusion:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                var: null
+                difference: {var: null, dfrI_th: "DFrI_TH"}
+                  
+      surface_exchange_flux:  # sum: #TFLUX, QFLUX, etc. includes freshwater forcing 
+        var: null
+        product:
+          var: null
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          boundary_heat_flux: "boundary_forcing_heat_tendency"  # deg C /s 
+      bottom_flux:
+        var: null
+        product:
+          var: null
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          surface_heat_flux: "geothermal_heat_flux_convergence"  # deg C m^3 /s 
+
+
+salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not salinity)
+  # Salt content per cell:  ρ * V * (s* SALT) * 1e-3   since SALT is in psu ~ g/kg
+  lambda: "SALT"
+  lhs:
+    var: null
+    sum:
+      var: null
+      Eulerian_tendency:
+        var: null
+        product:
+          var: null
+          density: 1029.0
+          volume: "volcello"
+          unit_conversion: 0.001
+          dsstarSALT_dt:
+            var: null
+            product:
+              var: null
+              dt_inv:
+                var: null
+                reciprocal: {var: null, dt: {var: "dt"}}
+              dsstarSALT:
+                var: null
+                difference:
+                  var: null
+                  sstarSALT:
+                    var: null
+                    product:
+                      var: null
+                      SALT: "SALT_bounds"
+                      sstar:
+                        var: null
+                        sum:
+                          var: null
+                          one: 1.0
+                          eta_over_depth:
+                            var: null
+                            product:
+                              var: null
+                              eta: "ETAN_bounds"
+                              deptho_inv:
+                                var: null
+                                reciprocal: {var: null, deptho: {var: "Depth"}}
+  rhs:
+    var: null
+    sum:
+      var: null
+      advection: 
+        var: null
+        sum:
+          var: null
+
+          lateral:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              unit_conversion: 0.001
+              sign: -1.0
+              salt_flux_divergence:
+                var: null
+                lateral_divergence:
+                  var: null
+                  Fx: {var: null, product: {var: null, advx_slt: "ADVx_SLT"}}
+                  Fy: {var: null, product: {var: null, advy_slt: "ADVy_SLT"}}
+
+          interfacial:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                var: null
+                difference: {var: null, advr_slt: "ADVr_SLT"}
+
+      diffusion: 
+        var: null
+        sum:
+          var: null
+          lateral:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              unit_conversion: 0.001
+              sign: -1.0
+              salt_flux_divergence:
+                var: null
+                lateral_divergence:
+                  var: null
+                  Fx: {var: null, product: {var: null, dfxe_slt: "DFxE_SLT"}}
+                  Fy: {var: null, product: {var: null, dfye_slt: "DFyE_SLT"}}
+
+          explicit_vertical_diffusion:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                var: null
+                difference: {var: null, dfrE_slt: "DFrE_SLT"}
+          implicit_vertical_diffusion:
+            var: null
+            product:
+              var: null
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                var: null
+                difference: {var: null, dfrI_slt: "DFrI_SLT"}
+
+      surface_exchange_flux: # (SFLUX + oceSPtnd at k=0; oceSPtnd below) in g/m^2/s, mapped to kg/s
+        var: null
+        product:
+          var: null
+          unit_conversion_g_to_kg: 0.001
+          area: "rA"
+          salt_forcing_per_unit_area: "boundary_forcing_salt_tendency"
