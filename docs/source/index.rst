@@ -21,3 +21,4 @@ While drafting a `.yaml` file from scratch for a new model can be daunting, it o
 
    installation
    examples/MOM6_budget_examples_mass_heat_salt
+   examples/ECCOV4r4_budget_examples_mass_heat_salt
