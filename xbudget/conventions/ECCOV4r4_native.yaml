@@ -114,7 +114,7 @@ heat: # finite-volume heat budget in s* in units of J/s (W)
           density: 1029.0
           specific_heat_capacity: 3994.0
           volume: "volcello"
-          dtheta_sstar_dt:
+          heatcontenttend:
             var: null
             product:
               var: null
@@ -124,16 +124,16 @@ heat: # finite-volume heat budget in s* in units of J/s (W)
                   var: null
                   dt:
                     var: "dt"
-              dtheta_sstar:
+              heatcontentdiff:
                 var: null
                 difference:
                   var: null
-                  theta_sstar:
+                  heatcontent:
                     var: null
                     product: 
                       var: null
                       theta: "THETA_bounds"
-                      sstar:
+                      stretching_factor:
                         var: null
                         sum:
                           var: null
@@ -265,23 +265,23 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
           density: 1029.0
           volume: "volcello"
           unit_conversion: 0.001
-          dsstarSALT_dt:
+          saltcontenttend:
             var: null
             product:
               var: null
               dt_inv:
                 var: null
                 reciprocal: {var: null, dt: {var: "dt"}}
-              dsstarSALT:
+              saltcontentdiff:
                 var: null
                 difference:
                   var: null
-                  sstarSALT:
+                  saltcontent:
                     var: null
                     product:
                       var: null
                       SALT: "SALT_bounds"
-                      sstar:
+                      stretching_factor:
                         var: null
                         sum:
                           var: null
