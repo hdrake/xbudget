@@ -97,7 +97,7 @@ mass: # finite-volume mass budget in units of kg/s
         var: null
         product:
           var: null
-          mass_tendency_per_unit_area: "oceFWflx_3d"
+          mass_tendency_per_unit_area: "boundary_forcing_volume_tendency"
           sign: 1.0
           area: "rA"
 

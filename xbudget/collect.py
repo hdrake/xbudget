@@ -306,11 +306,13 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
                 warnings.warn(f"Could not compute fluxes for {namepath}, skipping.")
                 continue
 
-            if not hasattr(grid, "_face_connections"):
-                raise NotImplementedError("`lateral_divergence` operator is not implemented for grids without face connections.")
-            else:                    
-                div = diff_2d_flux_llc90(grid, Fx, Fy)
+            if ("tile" in ds.coords) or ("face" in ds.coords):    
+                div = diff_2d_flux_llc90(grid, Fx, Fy, allow_rechunk=allow_rechunk)
                 var = div["X"] + div["Y"]
+            elif not hasattr(grid, "_face_connections"):
+                raise NotImplementedError("`lateral_divergence` operator is not implemented for grids without face connections.") 
+            else: 
+                raise NotImplementedError("`lateral_divergence` operator is not implemented for your grid type.")
                 
             var_name = f"{namepath}_lateral_divergence"
             var = var.rename(var_name)

@@ -1,7 +1,8 @@
+import warnings
 import numpy as np
 import xarray as xr
 
-def diff_2d_flux_llc90(grid, Fx, Fy):
+def diff_2d_flux_llc90(grid, Fx, Fy, allow_rechunk=True):
     """Computes 2D flux divergences on an LLC90 grid.
 
     Why this exists:
@@ -19,6 +20,8 @@ def diff_2d_flux_llc90(grid, Fx, Fy):
       Fy: Y-face flux `xarray.DataArray` (e.g., `VVELMASS * dxG * drF`). Must be staggered
         on exactly one non-center Y dimension (e.g., `j_g`) and include the LLC face
         dimension inferred from `grid._face_connections`.
+      allow_rechunk: Whether to temporarily rechunk LLC90 horizontal dimensions before
+        taking stitched differences.
 
     Returns:
       Dict with keys {"X","Y"}:
@@ -52,6 +55,15 @@ def diff_2d_flux_llc90(grid, Fx, Fy):
     Xc, Yc = _center_dim("X"), _center_dim("Y")
     Xs = _staggered_dim("X", Fx)
     Ys = _staggered_dim("Y", Fy)
+
+    if allow_rechunk:
+        try:
+            original_chunks = dict(ds.chunksizes)
+        except Exception:
+            warnings.warn("Dataset chunks are inconsistent; using unify_chunks()", UserWarning)
+            original_chunks = dict(ds.unify_chunks().chunksizes)
+        Fx = Fx.chunk({d: -1 for d in [face_dim, Xc, Yc, Xs, Ys] if d in Fx.dims})
+        Fy = Fy.chunk({d: -1 for d in [face_dim, Xc, Yc, Xs, Ys] if d in Fy.dims})
 
     xs_new = int(Fx[Xs].isel({Xs: -1}).values) + 1
     ys_new = int(Fy[Ys].isel({Ys: -1}).values) + 1
@@ -133,10 +145,18 @@ def diff_2d_flux_llc90(grid, Fx, Fy):
         join="override",
     )
 
-    Fx_p = xr.concat([Fx, gx], dim=Xs, coords="minimal", compat="override", join="override").chunk({Xs: -1})
-    Fy_p = xr.concat([Fy, gy], dim=Ys, coords="minimal", compat="override", join="override").chunk({Ys: -1})
+    Fx_p = xr.concat([Fx, gx], dim=Xs, coords="minimal", compat="override", join="override")
+    Fy_p = xr.concat([Fy, gy], dim=Ys, coords="minimal", compat="override", join="override")
+
+    if allow_rechunk:
+        Fx_p = Fx_p.chunk({d: -1 for d in [face_dim, Xc, Yc, Xs, Ys] if d in Fx_p.dims})
+        Fy_p = Fy_p.chunk({d: -1 for d in [face_dim, Xc, Yc, Xs, Ys] if d in Fy_p.dims})
 
     dFx = Fx_p.diff(Xs).rename({Xs: Xc}).assign_coords({Xc: ds[Xc]})
     dFy = Fy_p.diff(Ys).rename({Ys: Yc}).assign_coords({Yc: ds[Yc]})
+
+    if allow_rechunk:
+        dFx = dFx.chunk({d: original_chunks.get(d, dFx.chunksizes[d]) for d in dFx.dims})
+        dFy = dFy.chunk({d: original_chunks.get(d, dFy.chunksizes[d]) for d in dFy.dims})
 
     return {"X": dFx, "Y": dFy}
