@@ -504,3 +504,54 @@ class TestBudgetFillDict:
 
         # The numerical results should be identical
         xr.testing.assert_allclose(tendency_rechunked, tendency_correct)
+
+    def test_difference_without_grid_raises_value_error(self):
+        """A `difference` op without an xgcm.Grid must raise a clear ValueError.
+
+        Regression test: previously the grid guard was misplaced, so passing a
+        plain Dataset reached an undefined ``staggered_axes`` and raised an
+        opaque NameError instead.
+        """
+        ds = xr.Dataset(
+            {"flux": xr.DataArray(np.random.rand(5), dims=("x_g",))},
+            coords={"x_g": np.arange(5)},
+        )
+        xbudget_dict = {"var": None, "difference": {"flux": "flux", "var": None}}
+
+        with pytest.raises(ValueError, match="xgcm.Grid"):
+            budget_fill_dict(ds, xbudget_dict, "tendency_rhs")
+
+    def test_difference_not_first_term_does_not_raise(self):
+        """A `difference` term that is not evaluated first must not raise.
+
+        Regression test: the `else: raise(...must be xgcm.Grid...)` was attached
+        to `if var_pref is None` rather than to a grid check, so any difference
+        reached after another operation in the same node spuriously errored even
+        when a valid grid was supplied.
+        """
+        ds = xr.Dataset(
+            {"flux": xr.DataArray(np.random.rand(5, 3), dims=("x_g", "y_c"))},
+            coords={
+                "x_g": np.arange(5),
+                "x_c": np.arange(4) + 0.5,
+                "y_c": np.arange(3),
+            },
+        )
+        grid = xgcm.Grid(
+            ds,
+            coords={"X": {"center": "x_c", "left": "x_g"}},
+            periodic=False,
+            autoparse_metadata=False,
+        )
+        # A node with a `product` (evaluated first, sets the running variable)
+        # followed by a `difference` (previously tripped the misplaced raise).
+        xbudget_dict = {
+            "var": None,
+            "product": {"var": None, "scale": -1.0, "a": "flux"},
+            "difference": {"var": None, "d": "flux"},
+        }
+
+        budget_fill_dict(grid, xbudget_dict, "tendency_rhs")
+
+        assert "tendency_rhs_product" in grid._ds
+        assert "tendency_rhs_difference" in grid._ds

@@ -8,6 +8,15 @@ import xgcm
 
 import warnings
 
+def _warn_missing_variable(name):
+    """Warn that a requested variable is absent from the dataset and skipped."""
+    warnings.warn(
+        f"Variable {name} is missing from the dataset `ds`, so it is being "
+        f"skipped. To suppress this warning, remove {name} from the "
+        f"`xbudget_dict`.",
+        UserWarning,
+    )
+
 def aggregate(xbudget_dict, decompose=[]):
     """Aggregate xbudget dictionary into simpler root-level budgets.
 
@@ -140,15 +149,17 @@ def deep_search(b):
     --------
     aggregate, _deep_search
     """
-    return _deep_search(b, new_b={}, k_last=None)
+    return _deep_search(b, new_b=None, k_last=None)
 
-def _deep_search(b, new_b={}, k_last=None):
+def _deep_search(b, new_b=None, k_last=None):
     """Recursive function for searching for variables in xbudget dictionary.
-    
+
     See also
     --------
     aggregate, deep_search
     """
+    if new_b is None:
+        new_b = {}
     if type(b) is str:
         new_b[k_last] = b
     elif type(b) is dict:
@@ -228,14 +239,14 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
                     if v_term_recursive is not None:
                         op_list.append(v_term_recursive)
                     elif v_term.get("var") is not None and v_term.get("var") not in ds:
-                        warnings.warn(f"Variable {v_term.get('var')} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term.get('var')} from the `xbudget_dict`.", UserWarning)
+                        _warn_missing_variable(v_term.get("var"))
                 elif isinstance(v_term, numbers.Number):
                     op_list.append(v_term)
                 elif isinstance(v_term, str):
                     if v_term in ds:
                         op_list.append(ds[v_term])
                     else:
-                        warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.", UserWarning)
+                        _warn_missing_variable(v_term)
                         if k=="product":
                             op_list.append(0.)
 
@@ -274,7 +285,7 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
         if k == "reciprocal":
             v_term = [v_term for k_term, v_term in v.items() if k_term != "var"][0]
             if v_term['var'] not in ds:
-                warnings.warn(f"Variable {v_term['var']} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term['var']} from the `xbudget_dict`.")
+                _warn_missing_variable(v_term['var'])
                 continue
 
             #A safe reciprocal that filters zeros out. 
@@ -297,15 +308,19 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
 
         
         if k == "difference":
-            if grid is not None:
-                staggered_axes = {
-                    axn:c for axn,ax in grid.axes.items()
-                    for pos,c in ax.coords.items()
-                    if pos!="center"
-                }
+            if grid is None:
+                raise ValueError(
+                    "Input `data` must be an `xgcm.Grid` instance when using "
+                    "`difference` operations."
+                )
+            staggered_axes = {
+                axn:c for axn,ax in grid.axes.items()
+                for pos,c in ax.coords.items()
+                if pos!="center"
+            }
             v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
             if v_term not in ds:
-                warnings.warn(f"Variable {v_term} is missing from the dataset `ds`, so it is being skipped. To suppress this warning, remove {v_term} from the `xbudget_dict`.")
+                _warn_missing_variable(v_term)
                 continue
 
             candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
@@ -343,10 +358,6 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             ds[var_name] = var
             if var_pref is None:
                 var_pref = var.copy()
-            else:
-                raise ValueError("Input `ds` must be `xgcm.Grid` instance if using `difference` operations.")
-
-
 
     return var_pref
 
