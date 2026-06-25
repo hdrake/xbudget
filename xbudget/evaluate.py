@@ -11,6 +11,7 @@ variables into the dataset. It never mutates the recipe (the typed tree is
 immutable). Alongside the new variables it records a legacy->new name map so
 callers can offer backward-compatible names and a migration table.
 """
+import warnings
 from functools import reduce
 from operator import mul
 
@@ -193,8 +194,6 @@ class _Evaluator:
             try:
                 original_chunks = dict(ds.chunksizes)
             except Exception:
-                import warnings
-
                 warnings.warn(
                     "Dataset chunks are inconsistent; using unify_chunks()",
                     UserWarning,
