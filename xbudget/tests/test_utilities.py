@@ -311,7 +311,7 @@ class TestCollectBudgets:
         assert "heat_rhs_sum_forcing" not in ds
 
     def test_collect_budgets_legacy_name_scheme(self):
-        """name_scheme='legacy' also exposes the historical variable names."""
+        """name_scheme='legacy' reproduces the historical names and fills the dict."""
         ds = xr.Dataset({
             "forcing_diag": xr.DataArray(np.random.rand(3, 3), dims=("x", "y")),
         }, coords={"x": [0, 1, 2], "y": [0, 1, 2]})
@@ -319,14 +319,14 @@ class TestCollectBudgets:
             "heat": {"rhs": {"sum": {"forcing": {"var": "forcing_diag"}, "var": None}, "var": None}}
         }
         collect_budgets(ds, xbudget_dict, name_scheme="legacy")
-        # Both new and legacy names resolve to the same data.
-        assert "heat_rhs_forcing" in ds
+        # Historical variable names are produced...
         assert "heat_rhs_sum_forcing" in ds
         assert "heat_rhs_sum" in ds
-        xr.testing.assert_equal(
-            ds["heat_rhs_sum_forcing"].drop_vars("provenance", errors="ignore"),
-            ds["heat_rhs_forcing"].drop_vars("provenance", errors="ignore"),
-        )
+        assert "heat_rhs" in ds
+        # ...the simplified names are not (legacy mode is faithful to the old engine)...
+        assert "heat_rhs_forcing" not in ds
+        # ...and the recipe dict is filled in place (get_vars/aggregate rely on this).
+        assert xbudget_dict["heat"]["rhs"]["var"] == "heat_rhs"
 
     def test_collect_budgets_does_not_mutate_recipe(self):
         """collect_budgets must not mutate the input convention dict."""

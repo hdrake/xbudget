@@ -190,34 +190,42 @@ def collect_budgets(data, xbudget_dict, allow_rechunk=True, name_scheme="v1"):
         e.g. to compute flux divergences on `center` from fluxes on `outer` or
         tendencies on `center` from snapshots on `outer`.
     name_scheme : {"v1", "legacy"} (default: "v1")
-        ``"v1"`` names each derived variable by its term path with operator
-        infixes dropped (e.g. ``heat_rhs_diffusion_lateral``). ``"legacy"``
-        additionally writes the historical operator-suffixed names (e.g.
-        ``heat_rhs_sum_diffusion_sum_lateral_product``) as aliases, for
-        backward compatibility during migration.
+        ``"v1"`` (recommended) uses the typed engine: each derived variable is
+        named by its term path with operator infixes dropped (e.g.
+        ``heat_rhs_diffusion_lateral``) and the recipe dict is left untouched.
+        ``"legacy"`` reproduces the historical behavior exactly: the
+        operator-suffixed names (e.g. ``heat_rhs_sum_diffusion_sum_lateral_product``)
+        plus their plain "copy" aliases, **and it mutates ``xbudget_dict`` in
+        place** to fill in ``var`` fields (which the legacy ``get_vars`` /
+        ``aggregate`` query helpers rely on).
 
     Returns
     -------
     data : xgcm.Grid or xr.Dataset
         The same object passed in, for convenience.
     """
-    from .parse import parse_budgets
-    from .evaluate import evaluate_budgets
+    if name_scheme == "legacy":
+        # Faithful legacy behavior: reuse the reference engine, which emits the
+        # historical names and fills the recipe dict in place so that the
+        # dict-based query helpers (get_vars/aggregate) keep working.
+        for eq, sides in xbudget_dict.items():
+            for side in ("lhs", "rhs"):
+                if side in sides:
+                    budget_fill_dict(
+                        data, sides[side], f"{eq}_{side}", allow_rechunk=allow_rechunk
+                    )
+        return data
 
-    if name_scheme not in ("v1", "legacy"):
+    if name_scheme != "v1":
         raise ValueError(
             f"Unknown name_scheme {name_scheme!r}; expected 'v1' or 'legacy'."
         )
 
+    from .parse import parse_budgets
+    from .evaluate import evaluate_budgets
+
     budgets = parse_budgets(xbudget_dict)
-    alias_map, _ = evaluate_budgets(data, budgets, allow_rechunk=allow_rechunk)
-
-    if name_scheme == "legacy":
-        ds = data._ds if isinstance(data, xgcm.grid.Grid) else data
-        for legacy_name, new_name in alias_map.items():
-            if legacy_name not in ds:
-                ds[legacy_name] = ds[new_name].rename(legacy_name)
-
+    evaluate_budgets(data, budgets, allow_rechunk=allow_rechunk)
     return data
 
 def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
