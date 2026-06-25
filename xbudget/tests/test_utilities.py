@@ -303,10 +303,44 @@ class TestCollectBudgets:
         }
         
         collect_budgets(ds, xbudget_dict)
+        # New scheme: one variable per node, operator infixes dropped.
+        assert "heat_rhs_forcing" in ds
+        assert "heat_rhs" in ds
+        # The redundant operator-suffixed names are gone by default.
+        assert "heat_rhs_sum" not in ds
+        assert "heat_rhs_sum_forcing" not in ds
+
+    def test_collect_budgets_legacy_name_scheme(self):
+        """name_scheme='legacy' also exposes the historical variable names."""
+        ds = xr.Dataset({
+            "forcing_diag": xr.DataArray(np.random.rand(3, 3), dims=("x", "y")),
+        }, coords={"x": [0, 1, 2], "y": [0, 1, 2]})
+        xbudget_dict = {
+            "heat": {"rhs": {"sum": {"forcing": {"var": "forcing_diag"}, "var": None}, "var": None}}
+        }
+        collect_budgets(ds, xbudget_dict, name_scheme="legacy")
+        # Both new and legacy names resolve to the same data.
+        assert "heat_rhs_forcing" in ds
         assert "heat_rhs_sum_forcing" in ds
         assert "heat_rhs_sum" in ds
-        assert "heat_rhs" in ds
-        
+        xr.testing.assert_equal(
+            ds["heat_rhs_sum_forcing"].drop_vars("provenance", errors="ignore"),
+            ds["heat_rhs_forcing"].drop_vars("provenance", errors="ignore"),
+        )
+
+    def test_collect_budgets_does_not_mutate_recipe(self):
+        """collect_budgets must not mutate the input convention dict."""
+        import copy as _copy
+        ds = xr.Dataset({
+            "forcing_diag": xr.DataArray(np.random.rand(3, 3), dims=("x", "y")),
+        }, coords={"x": [0, 1, 2], "y": [0, 1, 2]})
+        xbudget_dict = {
+            "heat": {"rhs": {"sum": {"forcing": {"var": "forcing_diag"}, "var": None}, "var": None}}
+        }
+        original = _copy.deepcopy(xbudget_dict)
+        collect_budgets(ds, xbudget_dict)
+        assert xbudget_dict == original
+
 
     def test_collect_budgets_with_lhs_rhs(self):
         """Test budget collection with both lhs and rhs"""

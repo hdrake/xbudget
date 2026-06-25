@@ -9,28 +9,10 @@
     "nanmax": 3940351370639.1494,
     "nanmin": -5551136678721.273,
     "nansum": 465392557504166.7,
-    "provenance": "heat_lhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_lhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 3940351370639.1494,
-    "nanmin": -5551136678721.273,
-    "nansum": 465392557504166.7,
     "provenance": [
-      "heat_lhs_sum_Eulerian_tendency_product",
-      "heat_lhs_sum_advection_sum",
-      "heat_lhs_sum_surface_ocean_flux_advective_negative_lhs_product"
+      "heat_lhs_Eulerian_tendency",
+      "heat_lhs_advection",
+      "heat_lhs_surface_ocean_flux_advective_negative_lhs"
     ],
     "shape": [
       1,
@@ -39,25 +21,7 @@
       240
     ]
   },
-  "heat_lhs_sum_Eulerian_tendency": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 31760549339386.81,
-    "nanmin": -50587387594801.766,
-    "nansum": 359498039810372.4,
-    "provenance": "heat_lhs_sum_Eulerian_tendency_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_lhs_sum_Eulerian_tendency_product": {
+  "heat_lhs_Eulerian_tendency": {
     "dims": [
       "time",
       "z_l",
@@ -78,25 +42,7 @@
       240
     ]
   },
-  "heat_lhs_sum_advection": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 50947166350802.836,
-    "nanmin": -31753242879300.414,
-    "nansum": -40008497.625,
-    "provenance": "heat_lhs_sum_advection_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_lhs_sum_advection_sum": {
+  "heat_lhs_advection": {
     "dims": [
       "time",
       "z_l",
@@ -107,8 +53,8 @@
     "nanmin": -31753242879300.414,
     "nansum": -40008497.625,
     "provenance": [
-      "heat_lhs_sum_advection_sum_lateral_product",
-      "heat_lhs_sum_advection_sum_interfacial_product"
+      "heat_lhs_advection_lateral",
+      "heat_lhs_advection_interfacial"
     ],
     "shape": [
       1,
@@ -117,25 +63,7 @@
       240
     ]
   },
-  "heat_lhs_sum_advection_sum_interfacial": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 52011903632147.234,
-    "nanmin": -66339650467105.27,
-    "nansum": -7964552.625,
-    "provenance": "heat_lhs_sum_advection_sum_interfacial_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_lhs_sum_advection_sum_interfacial_product": {
+  "heat_lhs_advection_interfacial": {
     "dims": [
       "time",
       "z_l",
@@ -157,25 +85,7 @@
       240
     ]
   },
-  "heat_lhs_sum_advection_sum_lateral": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 69858875966090.484,
-    "nanmin": -53668947014140.43,
-    "nansum": -32043947.75,
-    "provenance": "heat_lhs_sum_advection_sum_lateral_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_lhs_sum_advection_sum_lateral_product": {
+  "heat_lhs_advection_lateral": {
     "dims": [
       "time",
       "z_l",
@@ -197,25 +107,7 @@
       240
     ]
   },
-  "heat_lhs_sum_surface_ocean_flux_advective_negative_lhs": {
-    "dims": [
-      "time",
-      "yh",
-      "xh",
-      "z_l"
-    ],
-    "nanmax": 204413737780.63818,
-    "nanmin": -17530828054821.393,
-    "nansum": 105894557702285.67,
-    "provenance": "heat_lhs_sum_surface_ocean_flux_advective_negative_lhs_product",
-    "shape": [
-      1,
-      180,
-      240,
-      35
-    ]
-  },
-  "heat_lhs_sum_surface_ocean_flux_advective_negative_lhs_product": {
+  "heat_lhs_surface_ocean_flux_advective_negative_lhs": {
     "dims": [
       "time",
       "yh",
@@ -250,30 +142,12 @@
     "nanmax": 3940351305575.682,
     "nanmin": -5551136489805.616,
     "nansum": 465392547223857.06,
-    "provenance": "heat_rhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 3940351305575.682,
-    "nanmin": -5551136489805.616,
-    "nansum": 465392547223857.06,
     "provenance": [
-      "heat_rhs_sum_diffusion_sum",
-      "heat_rhs_sum_surface_exchange_flux_product",
-      "heat_rhs_sum_surface_ocean_flux_advective_negative_rhs_product",
-      "heat_rhs_sum_bottom_flux_product",
-      "heat_rhs_sum_frazil_ice_product"
+      "heat_rhs_diffusion",
+      "heat_rhs_surface_exchange_flux",
+      "heat_rhs_surface_ocean_flux_advective_negative_rhs",
+      "heat_rhs_bottom_flux",
+      "heat_rhs_frazil_ice"
     ],
     "shape": [
       1,
@@ -282,25 +156,7 @@
       240
     ]
   },
-  "heat_rhs_sum_bottom_flux": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 15602808942.544117,
-    "nanmin": 0.0,
-    "nansum": 34197020834727.336,
-    "provenance": "heat_rhs_sum_bottom_flux_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_bottom_flux_product": {
+  "heat_rhs_bottom_flux": {
     "dims": [
       "time",
       "z_l",
@@ -321,25 +177,7 @@
       240
     ]
   },
-  "heat_rhs_sum_diffusion": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 4403310884265.735,
-    "nanmin": -5668737491808.836,
-    "nansum": -513722.65625,
-    "provenance": "heat_rhs_sum_diffusion_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_diffusion_sum": {
+  "heat_rhs_diffusion": {
     "dims": [
       "time",
       "z_l",
@@ -350,8 +188,8 @@
     "nanmin": -5668737491808.836,
     "nansum": -513722.65625,
     "provenance": [
-      "heat_rhs_sum_diffusion_sum_lateral_product",
-      "heat_rhs_sum_diffusion_sum_interfacial_product"
+      "heat_rhs_diffusion_lateral",
+      "heat_rhs_diffusion_interfacial"
     ],
     "shape": [
       1,
@@ -360,25 +198,7 @@
       240
     ]
   },
-  "heat_rhs_sum_diffusion_sum_interfacial": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 4403310884265.735,
-    "nanmin": -5668737491808.836,
-    "nansum": -513722.65625,
-    "provenance": "heat_rhs_sum_diffusion_sum_interfacial_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_diffusion_sum_interfacial_product": {
+  "heat_rhs_diffusion_interfacial": {
     "dims": [
       "time",
       "z_l",
@@ -399,25 +219,7 @@
       240
     ]
   },
-  "heat_rhs_sum_diffusion_sum_lateral": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": 0.0,
-    "nansum": 0.0,
-    "provenance": "heat_rhs_sum_diffusion_sum_lateral_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_diffusion_sum_lateral_product": {
+  "heat_rhs_diffusion_lateral": {
     "dims": [
       "time",
       "z_l",
@@ -438,25 +240,7 @@
       240
     ]
   },
-  "heat_rhs_sum_frazil_ice": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 333573077881.8586,
-    "nanmin": -86785150.2558585,
-    "nansum": 10533909859144.72,
-    "provenance": "heat_rhs_sum_frazil_ice_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_frazil_ice_product": {
+  "heat_rhs_frazil_ice": {
     "dims": [
       "time",
       "z_l",
@@ -477,25 +261,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 17392565831274.252,
-    "nanmin": -5720652791938.084,
-    "nansum": 314767059341419.3,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_product": {
+  "heat_rhs_surface_exchange_flux": {
     "dims": [
       "time",
       "z_l",
@@ -516,46 +282,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 17380103825523.656,
-    "nanmin": -5720032356896.66,
-    "nansum": 314752971362487.25,
-    "provenance": [
-      "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum",
-      "heat_rhs_sum_surface_exchange_flux_sum_advective_product"
-    ],
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_advective": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 17638101725505.902,
-    "nanmin": -203329990587.71277,
-    "nansum": -91207548946119.94,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_advective_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_advective_product": {
+  "heat_rhs_surface_exchange_flux_advective": {
     "dims": [
       "time",
       "z_l",
@@ -576,25 +303,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2595512189140.2495,
-    "nanmin": -5648622249701.43,
-    "nansum": 405960520308607.25,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum": {
+  "heat_rhs_surface_exchange_flux_nonadvective": {
     "dims": [
       "time",
       "z_l",
@@ -605,10 +314,10 @@
     "nanmin": -5648622249701.43,
     "nansum": 405960520308607.25,
     "provenance": [
-      "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_latent_product",
-      "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_sensible_product",
-      "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_longwave_product",
-      "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_shortwave_product"
+      "heat_rhs_surface_exchange_flux_nonadvective_latent",
+      "heat_rhs_surface_exchange_flux_nonadvective_sensible",
+      "heat_rhs_surface_exchange_flux_nonadvective_longwave",
+      "heat_rhs_surface_exchange_flux_nonadvective_shortwave"
     ],
     "shape": [
       1,
@@ -617,25 +326,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_latent": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": -5751041213211.73,
-    "nansum": -3.707192070055726e+16,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_latent_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_latent_product": {
+  "heat_rhs_surface_exchange_flux_nonadvective_latent": {
     "dims": [
       "time",
       "z_l",
@@ -656,25 +347,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_longwave": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": -2250414053810.4854,
-    "nansum": -1.922110158863712e+16,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_longwave_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_longwave_product": {
+  "heat_rhs_surface_exchange_flux_nonadvective_longwave": {
     "dims": [
       "time",
       "z_l",
@@ -695,25 +368,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_sensible": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 261182636956.48416,
-    "nanmin": -1626395528795.3396,
-    "nansum": -5742803130717152.0,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_sensible_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_sensible_product": {
+  "heat_rhs_surface_exchange_flux_nonadvective_sensible": {
     "dims": [
       "time",
       "z_l",
@@ -734,25 +389,7 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_shortwave": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 6012543456110.167,
-    "nanmin": 0.0,
-    "nansum": 6.244178594022014e+16,
-    "provenance": "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_shortwave_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "heat_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_shortwave_product": {
+  "heat_rhs_surface_exchange_flux_nonadvective_shortwave": {
     "dims": [
       "time",
       "z_l",
@@ -773,25 +410,28 @@
       240
     ]
   },
-  "heat_rhs_sum_surface_ocean_flux_advective_negative_rhs": {
+  "heat_rhs_surface_exchange_flux_sum": {
     "dims": [
       "time",
+      "z_l",
       "yh",
-      "xh",
-      "z_l"
+      "xh"
     ],
-    "nanmax": 204413737780.63818,
-    "nanmin": -17530828054821.393,
-    "nansum": 105894557702285.67,
-    "provenance": "heat_rhs_sum_surface_ocean_flux_advective_negative_rhs_product",
+    "nanmax": 17380103825523.656,
+    "nanmin": -5720032356896.66,
+    "nansum": 314752971362487.25,
+    "provenance": [
+      "heat_rhs_surface_exchange_flux_nonadvective",
+      "heat_rhs_surface_exchange_flux_advective"
+    ],
     "shape": [
       1,
+      35,
       180,
-      240,
-      35
+      240
     ]
   },
-  "heat_rhs_sum_surface_ocean_flux_advective_negative_rhs_product": {
+  "heat_rhs_surface_ocean_flux_advective_negative_rhs": {
     "dims": [
       "time",
       "yh",
@@ -826,26 +466,8 @@
     "nanmax": 772357898.5436696,
     "nanmin": -1098185583.5343657,
     "nansum": 115673902.00515747,
-    "provenance": "mass_lhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_lhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 772357898.5436696,
-    "nanmin": -1098185583.5343657,
-    "nansum": 115673902.00515747,
     "provenance": [
-      "mass_lhs_sum_Eulerian_tendency_product"
+      "mass_lhs_Eulerian_tendency"
     ],
     "shape": [
       1,
@@ -854,25 +476,7 @@
       240
     ]
   },
-  "mass_lhs_sum_Eulerian_tendency": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 772357898.5436696,
-    "nanmin": -1098185583.5343657,
-    "nansum": 115673902.00515747,
-    "provenance": "mass_lhs_sum_Eulerian_tendency_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_lhs_sum_Eulerian_tendency_product": {
+  "mass_lhs_Eulerian_tendency": {
     "dims": [
       "time",
       "z_l",
@@ -904,27 +508,9 @@
     "nanmax": 772357889.8314499,
     "nanmin": -1098185581.6161919,
     "nansum": 115674835.3581543,
-    "provenance": "mass_rhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 772357889.8314499,
-    "nanmin": -1098185581.6161919,
-    "nansum": 115674835.3581543,
     "provenance": [
-      "mass_rhs_sum_advection_sum",
-      "mass_rhs_sum_surface_exchange_flux_product"
+      "mass_rhs_advection",
+      "mass_rhs_surface_exchange_flux"
     ],
     "shape": [
       1,
@@ -933,25 +519,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 772357889.8314499,
-    "nanmin": -1098185581.6161919,
-    "nansum": 867.4076232910156,
-    "provenance": "mass_rhs_sum_advection_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_advection_sum": {
+  "mass_rhs_advection": {
     "dims": [
       "time",
       "z_l",
@@ -962,8 +530,8 @@
     "nanmin": -1098185581.6161919,
     "nansum": 867.4076232910156,
     "provenance": [
-      "mass_rhs_sum_advection_sum_lateral_product",
-      "mass_rhs_sum_advection_sum_interfacial_product"
+      "mass_rhs_advection_lateral",
+      "mass_rhs_advection_interfacial"
     ],
     "shape": [
       1,
@@ -972,25 +540,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_interfacial": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2671057340.27241,
-    "nanmin": -2427147368.4921412,
-    "nansum": 517.6741333007812,
-    "provenance": "mass_rhs_sum_advection_sum_interfacial_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_advection_sum_interfacial_product": {
+  "mass_rhs_advection_interfacial": {
     "dims": [
       "time",
       "z_l",
@@ -1012,25 +562,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2440148050.6813173,
-    "nanmin": -2497054017.584284,
-    "nansum": 349.73358154296875,
-    "provenance": "mass_rhs_sum_advection_sum_lateral_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_advection_sum_lateral_product": {
+  "mass_rhs_advection_lateral": {
     "dims": [
       "time",
       "z_l",
@@ -1052,46 +584,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2912457444.776712,
-    "nanmin": -4003050052.4816775,
-    "nansum": -2.1696090698242188e-05,
-    "provenance": [
-      "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product",
-      "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence_product"
-    ],
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 8579974954.958902,
-    "nanmin": -9557597306.465754,
-    "nansum": 1.9669532775878906e-05,
-    "provenance": "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence_product": {
+  "mass_rhs_advection_lateral_meridional_convergence": {
     "dims": [
       "time",
       "z_l",
@@ -1102,7 +595,7 @@
     "nanmin": -9557597306.465754,
     "nansum": 1.9669532775878906e-05,
     "provenance": [
-      "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence_product_meridional_divergence_difference",
+      "mass_rhs_advection_lateral_meridional_convergence_meridional_divergence",
       -1.0
     ],
     "shape": [
@@ -1112,7 +605,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral_sum_meridional_convergence_product_meridional_divergence_difference": {
+  "mass_rhs_advection_lateral_meridional_convergence_meridional_divergence": {
     "dims": [
       "time",
       "z_l",
@@ -1130,17 +623,20 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence": {
+  "mass_rhs_advection_lateral_sum": {
     "dims": [
       "time",
       "z_l",
       "yh",
       "xh"
     ],
-    "nanmax": 9710258626.887672,
-    "nanmin": -8493629541.5945215,
-    "nansum": -2.5358131097164005e-05,
-    "provenance": "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product",
+    "nanmax": 2912457444.776712,
+    "nanmin": -4003050052.4816775,
+    "nansum": -2.1696090698242188e-05,
+    "provenance": [
+      "mass_rhs_advection_lateral_zonal_convergence",
+      "mass_rhs_advection_lateral_meridional_convergence"
+    ],
     "shape": [
       1,
       35,
@@ -1148,7 +644,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product": {
+  "mass_rhs_advection_lateral_zonal_convergence": {
     "dims": [
       "time",
       "z_l",
@@ -1159,7 +655,7 @@
     "nanmin": -8493629541.5945215,
     "nansum": -2.5358131097164005e-05,
     "provenance": [
-      "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product_zonal_divergence_difference",
+      "mass_rhs_advection_lateral_zonal_convergence_zonal_divergence",
       -1.0
     ],
     "shape": [
@@ -1169,7 +665,7 @@
       240
     ]
   },
-  "mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product_zonal_divergence_difference": {
+  "mass_rhs_advection_lateral_zonal_convergence_zonal_divergence": {
     "dims": [
       "time",
       "z_l",
@@ -1187,25 +683,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 150994667.24675918,
-    "nanmin": -1904967.9231000121,
-    "nansum": 115673967.95055571,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_product": {
+  "mass_rhs_surface_exchange_flux": {
     "dims": [
       "time",
       "z_l",
@@ -1227,51 +705,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 150994723.95384806,
-    "nanmin": -1904967.918458563,
-    "nansum": 115673969.77256012,
-    "provenance": [
-      "mass_rhs_sum_surface_exchange_flux_sum_rain_and_ice_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_snow_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_evaporation_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_rivers_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_icebergs_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_sea_ice_melt_product",
-      "mass_rhs_sum_surface_exchange_flux_sum_virtual_precip_restoring_product"
-    ],
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_evaporation": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": -2300416.4874340678,
-    "nansum": -14730094071.40564,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_evaporation_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_evaporation_product": {
+  "mass_rhs_surface_exchange_flux_evaporation": {
     "dims": [
       "time",
       "z_l",
@@ -1292,25 +726,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_icebergs": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 1083971.7984599557,
-    "nanmin": -1.9552115609538865e-17,
-    "nansum": 83931421.94583575,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_icebergs_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_icebergs_product": {
+  "mass_rhs_surface_exchange_flux_icebergs": {
     "dims": [
       "time",
       "z_l",
@@ -1331,25 +747,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_rain_and_ice": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 6086412.035137083,
-    "nanmin": 0.0,
-    "nansum": 12440605354.218473,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_rain_and_ice_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_rain_and_ice_product": {
+  "mass_rhs_surface_exchange_flux_rain_and_ice": {
     "dims": [
       "time",
       "z_l",
@@ -1370,25 +768,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_rivers": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 150788357.63074237,
-    "nanmin": 0.0,
-    "nansum": 1348385571.4572797,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_rivers_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_rivers_product": {
+  "mass_rhs_surface_exchange_flux_rivers": {
     "dims": [
       "time",
       "z_l",
@@ -1409,25 +789,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_sea_ice_melt": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 769519.4319497072,
-    "nanmin": -1316129.1160761716,
-    "nansum": 318197709.37157536,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_sea_ice_melt_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_sea_ice_melt_product": {
+  "mass_rhs_surface_exchange_flux_sea_ice_melt": {
     "dims": [
       "time",
       "z_l",
@@ -1448,25 +810,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_snow": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 218942.7784607154,
-    "nanmin": 0.0,
-    "nansum": 654647984.1850371,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_snow_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "mass_rhs_sum_surface_exchange_flux_sum_snow_product": {
+  "mass_rhs_surface_exchange_flux_snow": {
     "dims": [
       "time",
       "z_l",
@@ -1487,17 +831,25 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_virtual_precip_restoring": {
+  "mass_rhs_surface_exchange_flux_sum": {
     "dims": [
       "time",
       "z_l",
       "yh",
       "xh"
     ],
-    "nanmax": 0.0,
-    "nanmin": 0.0,
-    "nansum": 0.0,
-    "provenance": "mass_rhs_sum_surface_exchange_flux_sum_virtual_precip_restoring_product",
+    "nanmax": 150994723.95384806,
+    "nanmin": -1904967.918458563,
+    "nansum": 115673969.77256012,
+    "provenance": [
+      "mass_rhs_surface_exchange_flux_rain_and_ice",
+      "mass_rhs_surface_exchange_flux_snow",
+      "mass_rhs_surface_exchange_flux_evaporation",
+      "mass_rhs_surface_exchange_flux_rivers",
+      "mass_rhs_surface_exchange_flux_icebergs",
+      "mass_rhs_surface_exchange_flux_sea_ice_melt",
+      "mass_rhs_surface_exchange_flux_virtual_precip_restoring"
+    ],
     "shape": [
       1,
       35,
@@ -1505,7 +857,7 @@
       240
     ]
   },
-  "mass_rhs_sum_surface_exchange_flux_sum_virtual_precip_restoring_product": {
+  "mass_rhs_surface_exchange_flux_virtual_precip_restoring": {
     "dims": [
       "time",
       "z_l",
@@ -1536,28 +888,10 @@
     "nanmax": 2884969.3389652804,
     "nanmin": -2557682.911046171,
     "nansum": 22015698.012058213,
-    "provenance": "salt_lhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_lhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2884969.3389652804,
-    "nanmin": -2557682.911046171,
-    "nansum": 22015698.012058213,
     "provenance": [
-      "salt_lhs_sum_Eulerian_tendency_product",
-      "salt_lhs_sum_advection_sum",
-      "salt_lhs_sum_surface_ocean_flux_advective_negative_lhs_product"
+      "salt_lhs_Eulerian_tendency",
+      "salt_lhs_advection",
+      "salt_lhs_surface_ocean_flux_advective_negative_lhs"
     ],
     "shape": [
       1,
@@ -1566,25 +900,7 @@
       240
     ]
   },
-  "salt_lhs_sum_Eulerian_tendency": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 26922679.91256405,
-    "nanmin": -38341991.951405145,
-    "nansum": 155930.49178028107,
-    "provenance": "salt_lhs_sum_Eulerian_tendency_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_lhs_sum_Eulerian_tendency_product": {
+  "salt_lhs_Eulerian_tendency": {
     "dims": [
       "time",
       "z_l",
@@ -1605,25 +921,7 @@
       240
     ]
   },
-  "salt_lhs_sum_advection": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 38340568.789027676,
-    "nanmin": -26925361.134083405,
-    "nansum": -5.824695110321045,
-    "provenance": "salt_lhs_sum_advection_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_lhs_sum_advection_sum": {
+  "salt_lhs_advection": {
     "dims": [
       "time",
       "z_l",
@@ -1634,8 +932,8 @@
     "nanmin": -26925361.134083405,
     "nansum": -5.824695110321045,
     "provenance": [
-      "salt_lhs_sum_advection_sum_lateral_product",
-      "salt_lhs_sum_advection_sum_interfacial_product"
+      "salt_lhs_advection_lateral",
+      "salt_lhs_advection_interfacial"
     ],
     "shape": [
       1,
@@ -1644,25 +942,7 @@
       240
     ]
   },
-  "salt_lhs_sum_advection_sum_interfacial": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 84183420.2203544,
-    "nanmin": -91964669.39212582,
-    "nansum": 1.1313326358795166,
-    "provenance": "salt_lhs_sum_advection_sum_interfacial_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_lhs_sum_advection_sum_interfacial_product": {
+  "salt_lhs_advection_interfacial": {
     "dims": [
       "time",
       "z_l",
@@ -1684,25 +964,7 @@
       240
     ]
   },
-  "salt_lhs_sum_advection_sum_lateral": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 86609080.98676263,
-    "nanmin": -84634259.08775437,
-    "nansum": -6.956027030944824,
-    "provenance": "salt_lhs_sum_advection_sum_lateral_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_lhs_sum_advection_sum_lateral_product": {
+  "salt_lhs_advection_lateral": {
     "dims": [
       "time",
       "z_l",
@@ -1724,25 +986,7 @@
       240
     ]
   },
-  "salt_lhs_sum_surface_ocean_flux_advective_negative_lhs": {
-    "dims": [
-      "time",
-      "yh",
-      "xh",
-      "z_l"
-    ],
-    "nanmax": 66860.41314122651,
-    "nanmin": -1196339.2712781483,
-    "nansum": 21859773.34497478,
-    "provenance": "salt_lhs_sum_surface_ocean_flux_advective_negative_lhs_product",
-    "shape": [
-      1,
-      180,
-      240,
-      35
-    ]
-  },
-  "salt_lhs_sum_surface_ocean_flux_advective_negative_lhs_product": {
+  "salt_lhs_surface_ocean_flux_advective_negative_lhs": {
     "dims": [
       "time",
       "yh",
@@ -1777,28 +1021,10 @@
     "nanmax": 2884965.8031573864,
     "nanmin": -2557682.9323331164,
     "nansum": 22012949.476222686,
-    "provenance": "salt_rhs_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2884965.8031573864,
-    "nanmin": -2557682.9323331164,
-    "nansum": 22012949.476222686,
     "provenance": [
-      "salt_rhs_sum_diffusion_sum",
-      "salt_rhs_sum_surface_exchange_flux_product",
-      "salt_rhs_sum_surface_ocean_flux_advective_negative_rhs_product"
+      "salt_rhs_diffusion",
+      "salt_rhs_surface_exchange_flux",
+      "salt_rhs_surface_ocean_flux_advective_negative_rhs"
     ],
     "shape": [
       1,
@@ -1807,25 +1033,7 @@
       240
     ]
   },
-  "salt_rhs_sum_diffusion": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2884752.5718469503,
-    "nanmin": -2557647.378450736,
-    "nansum": 0.013583011459559202,
-    "provenance": "salt_rhs_sum_diffusion_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_diffusion_sum": {
+  "salt_rhs_diffusion": {
     "dims": [
       "time",
       "z_l",
@@ -1836,8 +1044,8 @@
     "nanmin": -2557647.378450736,
     "nansum": 0.013583011459559202,
     "provenance": [
-      "salt_rhs_sum_diffusion_sum_lateral_product",
-      "salt_rhs_sum_diffusion_sum_interfacial_product"
+      "salt_rhs_diffusion_lateral",
+      "salt_rhs_diffusion_interfacial"
     ],
     "shape": [
       1,
@@ -1846,25 +1054,7 @@
       240
     ]
   },
-  "salt_rhs_sum_diffusion_sum_interfacial": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2884752.5718469503,
-    "nanmin": -2557647.378450736,
-    "nansum": 0.013583011459559202,
-    "provenance": "salt_rhs_sum_diffusion_sum_interfacial_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_diffusion_sum_interfacial_product": {
+  "salt_rhs_diffusion_interfacial": {
     "dims": [
       "time",
       "z_l",
@@ -1885,25 +1075,7 @@
       240
     ]
   },
-  "salt_rhs_sum_diffusion_sum_lateral": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": 0.0,
-    "nansum": 0.0,
-    "provenance": "salt_rhs_sum_diffusion_sum_lateral_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_diffusion_sum_lateral_product": {
+  "salt_rhs_diffusion_lateral": {
     "dims": [
       "time",
       "z_l",
@@ -1924,25 +1096,7 @@
       240
     ]
   },
-  "salt_rhs_sum_surface_exchange_flux": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2276.0619504758206,
-    "nanmin": -4416.354356011937,
-    "nansum": 153176.1176649518,
-    "provenance": "salt_rhs_sum_surface_exchange_flux_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_surface_exchange_flux_product": {
+  "salt_rhs_surface_exchange_flux": {
     "dims": [
       "time",
       "z_l",
@@ -1963,46 +1117,7 @@
       240
     ]
   },
-  "salt_rhs_sum_surface_exchange_flux_sum": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2276.061950475834,
-    "nanmin": -4416.354356011937,
-    "nansum": 153176.1176644049,
-    "provenance": [
-      "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum",
-      "salt_rhs_sum_surface_exchange_flux_sum_advective_product"
-    ],
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_surface_exchange_flux_sum_advective": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 0.0,
-    "nanmin": -0.0,
-    "nansum": 0.0,
-    "provenance": "salt_rhs_sum_surface_exchange_flux_sum_advective_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_surface_exchange_flux_sum_advective_product": {
+  "salt_rhs_surface_exchange_flux_advective": {
     "dims": [
       "time",
       "z_l",
@@ -2026,25 +1141,7 @@
       240
     ]
   },
-  "salt_rhs_sum_surface_exchange_flux_sum_nonadvective": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2276.061950475834,
-    "nanmin": -4416.354356011937,
-    "nansum": 153176.1176644049,
-    "provenance": "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum": {
+  "salt_rhs_surface_exchange_flux_nonadvective": {
     "dims": [
       "time",
       "z_l",
@@ -2055,7 +1152,7 @@
     "nanmin": -4416.354356011937,
     "nansum": 153176.1176644049,
     "provenance": [
-      "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_basal_product"
+      "salt_rhs_surface_exchange_flux_nonadvective_basal"
     ],
     "shape": [
       1,
@@ -2064,25 +1161,7 @@
       240
     ]
   },
-  "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_basal": {
-    "dims": [
-      "time",
-      "z_l",
-      "yh",
-      "xh"
-    ],
-    "nanmax": 2276.061950475834,
-    "nanmin": -4416.354356011937,
-    "nansum": 153176.1176644049,
-    "provenance": "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_basal_product",
-    "shape": [
-      1,
-      35,
-      180,
-      240
-    ]
-  },
-  "salt_rhs_sum_surface_exchange_flux_sum_nonadvective_sum_basal_product": {
+  "salt_rhs_surface_exchange_flux_nonadvective_basal": {
     "dims": [
       "time",
       "z_l",
@@ -2103,25 +1182,28 @@
       240
     ]
   },
-  "salt_rhs_sum_surface_ocean_flux_advective_negative_rhs": {
+  "salt_rhs_surface_exchange_flux_sum": {
     "dims": [
       "time",
+      "z_l",
       "yh",
-      "xh",
-      "z_l"
+      "xh"
     ],
-    "nanmax": 66860.41314122651,
-    "nanmin": -1196339.2712781483,
-    "nansum": 21859773.34497478,
-    "provenance": "salt_rhs_sum_surface_ocean_flux_advective_negative_rhs_product",
+    "nanmax": 2276.061950475834,
+    "nanmin": -4416.354356011937,
+    "nansum": 153176.1176644049,
+    "provenance": [
+      "salt_rhs_surface_exchange_flux_nonadvective",
+      "salt_rhs_surface_exchange_flux_advective"
+    ],
     "shape": [
       1,
+      35,
       180,
-      240,
-      35
+      240
     ]
   },
-  "salt_rhs_sum_surface_ocean_flux_advective_negative_rhs_product": {
+  "salt_rhs_surface_ocean_flux_advective_negative_rhs": {
     "dims": [
       "time",
       "yh",

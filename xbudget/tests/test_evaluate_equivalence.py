@@ -39,13 +39,22 @@ DATA_PATH = os.path.normpath(
 
 
 def _run_legacy(build_grid, preset):
+    """Drive the legacy dict-walking engine (budget_fill_dict) directly.
+
+    ``collect_budgets`` now uses the typed engine, so the equivalence oracle
+    must call the legacy ``budget_fill_dict`` itself (the same loop the old
+    ``collect_budgets`` performed).
+    """
     grid = build_grid()
     ds = grid._ds
     before = set(ds.data_vars)
+    preset = copy.deepcopy(preset)  # legacy engine mutates the dict
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # legacy engine mutates the dict, so hand it a deep copy
-        xbudget.collect_budgets(grid, copy.deepcopy(preset))
+        for eq, sides in preset.items():
+            for side in ("lhs", "rhs"):
+                if side in sides:
+                    xbudget.budget_fill_dict(grid, sides[side], f"{eq}_{side}")
     return ds, set(ds.data_vars) - before
 
 

@@ -1,10 +1,12 @@
 """End-to-end characterization ("golden") test for the MOM6 preset.
 
-This is the safety net for the internals refactor (Phase 0): it pins the exact
-set of variables that ``collect_budgets`` materializes from the example MOM6
-grid, together with each variable's shape, provenance, and a numerical
-fingerprint. Later phases that restructure the engine can run this to prove they
-produce numerically identical results.
+Pins the exact set of variables that ``collect_budgets`` materializes from the
+example MOM6 grid, together with each variable's shape, provenance, and a
+numerical fingerprint. This guards the absolute output of the (typed) engine;
+``test_evaluate_equivalence`` separately ties it to the legacy engine.
+
+Originally introduced as the Phase 0 safety net for the internals refactor; the
+reference now reflects the typed engine's simplified variable names.
 
 The example dataset (~600 MB) is downloaded on demand from Zenodo and is not
 tracked in git, so this test is skipped when the file is absent (e.g. in CI that

@@ -169,39 +169,66 @@ def _deep_search(b, new_b=None, k_last=None):
             _deep_search(v, new_b=new_b, k_last=k)
         return new_b
 
-def collect_budgets(ds, xbudget_dict, allow_rechunk = True):
-    """Fills xbudget dictionary with all tracer content tendencies
+def collect_budgets(data, xbudget_dict, allow_rechunk=True, name_scheme="v1"):
+    """Materialize every budget term described by ``xbudget_dict`` into ``data``.
+
+    The convention dict is parsed into a typed expression tree
+    (:mod:`xbudget.nodes`) and evaluated (:func:`xbudget.evaluate.evaluate_budgets`).
+    Unlike the historical engine, this does **not** mutate ``xbudget_dict``; it
+    only adds derived variables to the dataset.
 
     Parameters
     ----------
-    ds : xr.Dataset containing budget diagnostics
-    xbudget_dict : dictionary in xbudget-compatible format
-        Example format:
-        >>> xbudget_dict = {
-            "heat": {
-                "rhs": {
-                    "sum": {
-                        "advection": {
-                            "var":"advective_tendency"
-                        },
-                        "var": "heat_rhs_sum"
-                    },
-                    "var": "heat_rhs",
-                }
-            }
-        }
+    data : xgcm.Grid or xr.Dataset
+        Budget diagnostics to read from and write derived variables into,
+        modified in place. A grid is required if the convention uses
+        ``difference`` operations.
+    xbudget_dict : dict
+        A convention in xbudget format (e.g. from ``load_preset_budget``).
     allow_rechunk : bool (default: True)
         Whether to temporarily rechunk when taking differences along a dimension,
         e.g. to compute flux divergences on `center` from fluxes on `outer` or
         tendencies on `center` from snapshots on `outer`.
+    name_scheme : {"v1", "legacy"} (default: "v1")
+        ``"v1"`` names each derived variable by its term path with operator
+        infixes dropped (e.g. ``heat_rhs_diffusion_lateral``). ``"legacy"``
+        additionally writes the historical operator-suffixed names (e.g.
+        ``heat_rhs_sum_diffusion_sum_lateral_product``) as aliases, for
+        backward compatibility during migration.
+
+    Returns
+    -------
+    data : xgcm.Grid or xr.Dataset
+        The same object passed in, for convenience.
     """
-    for eq, v in xbudget_dict.items():
-        for side in ["lhs", "rhs"]:
-            if side in v:
-                budget_fill_dict(ds, v[side], f"{eq}_{side}", allow_rechunk = allow_rechunk)
+    from .parse import parse_budgets
+    from .evaluate import evaluate_budgets
+
+    if name_scheme not in ("v1", "legacy"):
+        raise ValueError(
+            f"Unknown name_scheme {name_scheme!r}; expected 'v1' or 'legacy'."
+        )
+
+    budgets = parse_budgets(xbudget_dict)
+    alias_map, _ = evaluate_budgets(data, budgets, allow_rechunk=allow_rechunk)
+
+    if name_scheme == "legacy":
+        ds = data._ds if isinstance(data, xgcm.grid.Grid) else data
+        for legacy_name, new_name in alias_map.items():
+            if legacy_name not in ds:
+                ds[legacy_name] = ds[new_name].rename(legacy_name)
+
+    return data
 
 def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
-    """Recursively fill xbudget dictionary
+    """Recursively fill xbudget dictionary (legacy engine).
+
+    .. deprecated::
+        ``budget_fill_dict`` is the historical dict-walking engine, retained as
+        a reference implementation. Prefer :func:`collect_budgets`, which is
+        backed by the typed expression tree (:mod:`xbudget.nodes`) and does not
+        mutate the recipe dict. This function mutates both ``data`` and
+        ``xbudget_dict`` in place.
 
     Parameters
     ----------

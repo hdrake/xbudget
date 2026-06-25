@@ -67,13 +67,31 @@ class _Evaluator:
         """
         base = _new_name(term.path)
 
+        primary = None
+        first_emitted = True
+
+        # Leaf term: ``var`` references an existing diagnostic directly (e.g.
+        # ``{"var": "advective_tendency"}``). The legacy engine aliased it to the
+        # term's name; we do the same and treat it as the term's primary value.
+        if isinstance(term.explicit_var, str) and term.explicit_var in self.ds:
+            out = self.ds[term.explicit_var].rename(base).copy()
+            out.attrs["provenance"] = term.explicit_var
+            out.attrs["xbudget_path"] = list(term.path)
+            out.attrs["xbudget_op"] = "var"
+            self.ds[base] = out
+            self.alias_map[legacy_namepath] = base
+            self.records[base] = {
+                "path": list(term.path),
+                "op": "var",
+                "legacy_actual": legacy_namepath,
+            }
+            primary = out
+            first_emitted = False
+
         evaluated = []  # (op, value_or_None, provenance)
         for op in term.operations:
             value, provenance = self._eval_op(op, term, legacy_namepath)
             evaluated.append((op, value, provenance))
-
-        primary = None
-        first_emitted = True
         for op, value, provenance in evaluated:
             if value is None:
                 continue
