@@ -74,3 +74,13 @@ xbudget_dict ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_b
 - `examples/load_example_model_grid.py` — `load_MOM6_coarsened_diagnostics()` downloads (Zenodo, cached in `data/`) and builds an `xgcm.Grid` with X/Y center/outer coords and `areacello` metrics.
 - `examples/MOM6_budget_examples_mass_heat_salt.ipynb` — worked tutorial; its `collect_budgets` call uses `name_scheme="legacy"` so the rest of the notebook (old names, `get_vars`, `aggregate`) is unchanged.
 - The example `.nc` (~600 MB) is gitignored and fetched on demand; only `data/README.md` is tracked.
+
+## Pull request workflow
+
+When you push a new commit to a branch that already has an open pull request, update the PR description (the top comment / body) so it stays consistent with the latest commit — don't leave it describing only the original state:
+
+- Refresh the summary so it reflects what the branch does now.
+- If the description contains a task list / checklist, check off (`- [x]`) the items the new commit completed and add entries for any follow-up work it introduced.
+- Reflect scope, naming, or API changes so a reviewer reading only the PR body sees the current truth.
+
+Update it with the GitHub CLI as part of the same push, e.g. `gh pr edit <number> --body-file <path>` (or `--body "..."`), so the description never lags behind the commits.
