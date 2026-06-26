@@ -1,10 +1,10 @@
 """Evaluate a typed budget tree against a dataset/grid.
 
 The evaluator walks the :mod:`xbudget.nodes` tree and materializes one output
-variable per *operation* (a ``sum``/``product``/``difference``/``reciprocal``),
-naming it by its structured path with the operator infixes dropped (see
-``_new_name``). This collapses the legacy engine's duplicate "copy" variables
-while preserving the numerical results.
+variable per *operation* (a ``sum``/``product``/``difference``), naming it by
+its structured path with the operator infixes dropped (see ``_new_name``). This
+collapses the legacy engine's duplicate "copy" variables while preserving the
+numerical results.
 
 It is intentionally side-effecting in one place only: it writes the derived
 variables into the dataset. It never mutates the recipe (the typed tree is
@@ -15,7 +15,6 @@ import warnings
 from functools import reduce
 from operator import mul
 
-import numpy as np
 import xarray as xr
 import xgcm
 
@@ -23,7 +22,6 @@ from .nodes import (
     Constant,
     Difference,
     Product,
-    Reciprocal,
     Sum,
     Term,
     VarRef,
@@ -89,14 +87,29 @@ class _Evaluator:
             primary = out
             first_emitted = False
 
-        evaluated = []  # (op, value_or_None, provenance)
+        evaluated = []  # (op, value, provenance) for value-producing operations
         for op in term.operations:
             value, provenance = self._eval_op(op, term, legacy_namepath)
-            evaluated.append((op, value, provenance))
-        for op, value, provenance in evaluated:
-            if value is None:
-                continue
-            new_name = base if first_emitted else f"{base}_{op.kind}"
+            if value is not None:
+                evaluated.append((op, value, provenance))
+
+        # Choose which operation gets the bare path name (the term's primary
+        # value). The legacy engine reserved the plain namepath ("copy") for the
+        # first sum/product term, so prefer that; a lone difference takes the
+        # bare name (with no legacy copy). A leaf var, if present, already claimed
+        # it above (first_emitted is False), so no operation does.
+        primary_idx = None
+        if first_emitted:
+            for i, (op, _v, _p) in enumerate(evaluated):
+                if op.kind in ("sum", "product"):
+                    primary_idx = i
+                    break
+            if primary_idx is None and evaluated:
+                primary_idx = 0
+
+        for i, (op, value, provenance) in enumerate(evaluated):
+            is_primary = i == primary_idx
+            new_name = base if is_primary else f"{base}_{op.kind}"
             legacy_actual = f"{legacy_namepath}_{op.kind}"
 
             out = value.rename(new_name)
@@ -111,14 +124,13 @@ class _Evaluator:
                 "op": op.kind,
                 "legacy_actual": legacy_actual,
             }
-            if first_emitted:
+            if is_primary:
                 # The legacy engine also emitted a plain "copy" at the namepath
-                # for sum/product terms (never for difference/reciprocal).
+                # for sum/product terms (but not for a lone difference).
                 if op.kind in ("sum", "product"):
                     self.alias_map[legacy_namepath] = new_name
                     self.records[new_name]["legacy_copy"] = legacy_namepath
                 primary = out
-                first_emitted = False
 
         return primary
 
@@ -129,8 +141,6 @@ class _Evaluator:
             return self._eval_nary(op, legacy_namepath)
         if isinstance(op, Difference):
             return self._eval_difference(op)
-        if isinstance(op, Reciprocal):
-            return self._eval_reciprocal(op)
         raise TypeError(f"Unknown operation type {type(op).__name__}")
 
     def _eval_nary(self, op, legacy_namepath):
@@ -223,14 +233,6 @@ class _Evaluator:
         else:
             var = self.grid.diff(ds[op.source].fillna(0.0), axis)
 
-        return var, op.source
-
-    def _eval_reciprocal(self, op):
-        ds = self.ds
-        if op.source not in ds:
-            _warn_missing_variable(op.source)
-            return None, None
-        var = 1.0 / xr.where(ds[op.source] == 0, np.inf, ds[op.source])
         return var, op.source
 
 

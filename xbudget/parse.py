@@ -10,10 +10,6 @@ import numbers
 from .nodes import (
     Budget,
     Constant,
-    Difference,
-    Product,
-    Reciprocal,
-    Sum,
     Term,
     VarRef,
     NARY_OPS,
@@ -135,7 +131,7 @@ def _parse_operand(value, path, name):
 
 
 def _parse_unary(kind, body, path):
-    """Parse a ``difference`` or ``reciprocal`` operation (single source var)."""
+    """Parse a ``difference`` operation (a single source variable)."""
     if not isinstance(body, dict):
         raise BudgetParseError(
             f"'{kind}' at {_fmt(path)} must be a dict, got "
@@ -148,8 +144,8 @@ def _parse_unary(kind, body, path):
             f"found {len(sources)}: {[k for k, _ in sources]}."
         )
     _, source_value = sources[0]
-    # difference references a bare variable name; reciprocal historically wraps
-    # it in a {{var: ...}} sub-dict. Accept both forms.
+    # difference references a bare variable name; tolerate a {{var: ...}}
+    # sub-dict form as well.
     if isinstance(source_value, dict):
         source = source_value.get("var")
     else:

@@ -77,8 +77,7 @@ def _assert_equivalent(build_grid, preset):
     unmapped = legacy_new - set(alias_map)
     assert not unmapped, f"legacy names with no new equivalent: {sorted(unmapped)}"
 
-    # Every new variable matches its legacy "actual" counterpart numerically.
-    legacy_actuals = {v for v in legacy_new if v.rsplit("_", 1)[-1] in OPS}
+    # Every new variable matches its legacy counterpart numerically.
     assert set(records), "new engine produced no variables"
     for new_name, rec in records.items():
         legacy_actual = rec["legacy_actual"]
@@ -92,8 +91,22 @@ def _assert_equivalent(build_grid, preset):
             np.nan_to_num(a), np.nan_to_num(b), rtol=RTOL, atol=0.0
         ), f"{new_name}: values differ from legacy {legacy_actual}"
 
-    # The new engine emits exactly one variable per legacy "actual".
-    assert len(records) == len(legacy_actuals)
+    # The new engine emits exactly one variable per legacy "producer": each
+    # operator-suffixed actual, plus each leaf var (a bare legacy name with no
+    # operator-suffixed sibling). The redundant legacy "copies" are dropped.
+    legacy_actuals = {v for v in legacy_new if v.rsplit("_", 1)[-1] in OPS}
+    bare_legacy = legacy_new - legacy_actuals
+    legacy_leaves = {
+        v for v in bare_legacy if not any(f"{v}_{op}" in legacy_new for op in OPS)
+    }
+    legacy_producers = legacy_actuals | legacy_leaves
+    record_targets = {rec["legacy_actual"] for rec in records.values()}
+    assert record_targets == legacy_producers, (
+        f"new->legacy targets {sorted(record_targets)} != "
+        f"legacy producers {sorted(legacy_producers)}"
+    )
+    # No two new variables collide on a name or a legacy target (injective).
+    assert len(record_targets) == len(records)
     return records, alias_map
 
 
@@ -143,6 +156,8 @@ SYNTHETIC_PRESET = {
                         },
                     },
                 },
+                # leaf term: var references an existing diagnostic directly
+                "direct": {"var": "diag_a"},
                 # references a diagnostic absent from the dataset
                 "missing": {"var": None, "product": {"var": None, "d": "not_present"}},
             },
@@ -159,6 +174,9 @@ def test_equivalent_on_synthetic_grid():
     assert "tracer_rhs_boundary" in records  # primary (product)
     assert "tracer_rhs_boundary_sum" in records  # second decomposition
     assert "tracer_rhs_boundary_convergence" in records  # difference leaf
+    # leaf term: var references an existing diagnostic directly
+    assert "tracer_rhs_direct" in records
+    assert records["tracer_rhs_direct"]["op"] == "var"
 
 
 def _build_mom6_grid():

@@ -39,7 +39,6 @@ Top-level keys are budgets (`mass`, `heat`, `salt`). Each budget has `lhs` and/o
 - `sum` — add the child terms together
 - `product` — multiply child terms (scalar numbers allowed as factors, e.g. `density: 1035.`, `sign: -1.`)
 - `difference` — finite-difference a staggered flux across a grid axis (**requires an `xgcm.Grid`**)
-- `reciprocal` — safe `1/x` mapping zeros to infinity
 
 A node may carry more than one operation (e.g. a bulk `product` and an equivalent finer `sum`). Leaf string values (`"areacello"`, `"umo"`) are raw diagnostic names. Conventions live in `xbudget/conventions/*.yaml` (`MOM6.yaml` is canonical; also `MOM6_3Donly`, `MOM6_drift`, `MOM6_surface`).
 
@@ -49,9 +48,9 @@ A node may carry more than one operation (e.g. a bulk `product` and an equivalen
 xbudget_dict ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets──▶ derived variables + alias map
 ```
 
-- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference`/`Reciprocal` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations.
+- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations.
 - **`parse.py`** — `parse_budgets(dict) -> {name: Budget}`. The single source of schema truth; validates and raises `BudgetParseError` naming the offending path on malformed conventions.
-- **`evaluate.py`** — `evaluate_budgets(data, budgets)` walks the tree and materializes **one variable per operation**, named by its term path with operator infixes dropped (e.g. `heat_rhs_diffusion_lateral`). It is pure with respect to the recipe (never mutates it); it only writes derived variables into the dataset. Each variable gets `xbudget_path` (structured identity) and `provenance` (immediate inputs) attrs. Returns `(alias_map, records)` — `alias_map` maps every legacy name to its new name; `records` maps each new variable to its metadata. Dispatch is on node type (`Difference` requires an `xgcm.Grid` in its signature, so a grid-less difference fails fast with a clear error).
+- **`evaluate.py`** — `evaluate_budgets(data, budgets)` walks the tree and materializes **one variable per operation**, named by its term path with operator infixes dropped (e.g. `heat_rhs_diffusion_lateral`). It is pure with respect to the recipe (never mutates it); it only writes derived variables into the dataset. Each variable gets `xbudget_path` (structured identity), `xbudget_op` (the operation kind), and `provenance` (immediate inputs) attrs. Returns `(alias_map, records)` — `alias_map` maps every legacy name to its new name; `records` maps each new variable to its metadata. Dispatch is on node type (`Difference` requires an `xgcm.Grid` in its signature, so a grid-less difference fails fast with a clear error).
 - **`collect.py`** — the public surface:
   - `collect_budgets(data, xbudget_dict, allow_rechunk=True, name_scheme="v1")` → parses then evaluates. **`v1` (default)** uses the simplified names and does **not** mutate the recipe dict. **`legacy`** reuses `budget_fill_dict` to reproduce the historical operator-suffixed names *and* fill the recipe dict in place.
   - `budget_fill_dict(...)` → the legacy dict-walking engine, retained as a reference implementation (pinned by the equivalence test) and used by `name_scheme="legacy"`. It mutates both the dataset and the recipe dict.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — internals refactor (typed engine)
+## 0.7.0 — internals refactor (typed engine)
 
 This release replaces the recursive dict-walking engine with a typed expression
 tree (parse → evaluate). The convention/YAML format is **unchanged**; the
@@ -78,3 +78,10 @@ unchanged. Adopt the new scheme at your own pace.
 - `budget_fill_dict` is retained as the legacy reference engine (still used
   internally by `name_scheme="legacy"`) but is superseded by `collect_budgets`
   / `evaluate_budgets`.
+
+### Removed
+
+- The `reciprocal` operation. It was supported by the engine but used by no
+  shipped convention and exercised by no test; removed from the typed engine,
+  the parser, and the legacy `budget_fill_dict`. It can be reintroduced as a
+  typed node if a future convention needs it.

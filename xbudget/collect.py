@@ -8,6 +8,17 @@ import xgcm
 
 import warnings
 
+__all__ = [
+    "aggregate",
+    "disaggregate",
+    "deep_search",
+    "collect_budgets",
+    "budget_fill_dict",
+    "get_vars",
+    "flatten",
+    "flatten_lol",
+]
+
 def _warn_missing_variable(name):
     """Warn that a requested variable is absent from the dataset and skipped."""
     warnings.warn(
@@ -19,6 +30,12 @@ def _warn_missing_variable(name):
 
 def aggregate(xbudget_dict, decompose=[]):
     """Aggregate xbudget dictionary into simpler root-level budgets.
+
+    .. note::
+        This reads the ``var`` fields that the engine fills in, so it only
+        returns meaningful results after a legacy run, i.e.
+        ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. The
+        default ``name_scheme="v1"`` does not mutate the recipe.
 
     Parameters
     ----------
@@ -89,6 +106,8 @@ def aggregate(xbudget_dict, decompose=[]):
 def disaggregate(b, decompose=[]):
     """Disaggregate variable's provenance dictionary into summed parts
 
+    Operates on a filled recipe (see the note on :func:`aggregate`).
+
     Parameters
     ----------
     b : xbudget sub-dictionary for a variable
@@ -115,7 +134,7 @@ def disaggregate(b, decompose=[]):
         },
         "var": "heat_rhs",
     }
-    >>> {'advection': 'advective_tendency'}
+    >>> xbudget.disaggregate(b)
     {'advection': 'advective_tendency'}
 
     >>> xbudget.disaggregate(b, decompose="advection")
@@ -316,32 +335,7 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             # keep record of the first-listed variable
             if var_pref is None:
                 var_pref = var.copy()
-        
-        if k == "reciprocal":
-            v_term = [v_term for k_term, v_term in v.items() if k_term != "var"][0]
-            if v_term['var'] not in ds:
-                _warn_missing_variable(v_term['var'])
-                continue
 
-            #A safe reciprocal that filters zeros out. 
-            var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
-
-            var_name = f"{namepath}_reciprocal"
-            var = var.rename(var_name)
-            var.attrs["provenance"] = v_term['var']
-            ds[var_name] = var
-            if v['var'] is None:
-                v['var'] = var_name
-            if xbudget_dict["var"] is None:
-                var_copy = var.copy()
-                var_copy.attrs["provenance"] = var_name
-                xbudget_dict["var"] = namepath
-                if namepath not in ds:
-                    ds[namepath] = var_copy
-            if var_pref is None:
-                var_pref = var.copy()
-
-        
         if k == "difference":
             if grid is None:
                 raise ValueError(
@@ -398,6 +392,13 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
 
 def get_vars(xbudget_dict, terms):
     """Get xbudget sub-dictionaries for specified terms.
+
+    .. note::
+        Reads the ``var`` fields filled in by a legacy run, i.e.
+        ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. For the
+        default ``name_scheme="v1"`` engine, query the ``records``/``alias_map``
+        returned by :func:`xbudget.evaluate.evaluate_budgets` and the
+        ``provenance``/``xbudget_path`` variable attributes instead.
 
     Parameters
     ----------

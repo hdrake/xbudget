@@ -182,7 +182,11 @@ heat: # finite-volume heat budget in units of J/s
           nonadvective:
             var: null
             sum:
-              var: null # This sum is currently broken because the shortwave terms are 3D while the other terms are 2D!
+              # NOTE: this sum mixes 2D and 3D fields — the shortwave term
+              # (rsdoabsorb) is 3D while the other terms are 2D — so the summed
+              # result is only meaningful where they are reconciled (e.g. after
+              # vertically integrating the shortwave absorption).
+              var: null
               latent:
                 var: null
                 product:
@@ -207,10 +211,9 @@ heat: # finite-volume heat budget in units of J/s
                   var: null
                   tracer_content_tendency_per_unit_area: "rsdoabsorb"
                   area: "areacello"
-                # Not yet supported!
-                #var: "rsdoabsorb"
-                #finite_difference:
-                #  Z: "rsdo"
+                # Alternative (not yet supported): derive the per-layer
+                # shortwave heating from the radiative flux `rsdo` via a vertical
+                # `difference` along the Z axis, instead of using `rsdoabsorb`.
           advective:
             var: null
             product:

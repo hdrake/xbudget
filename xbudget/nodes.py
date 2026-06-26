@@ -11,10 +11,9 @@ The grammar (mirrors the YAML, see ``conventions/*.yaml``)::
 
     Budget        := name, metadata, {side: Term}          # side in {lhs, rhs}
     Term          := name, path, explicit_var?, [Operation]
-    Operation     := Sum | Product | Difference | Reciprocal
+    Operation     := Sum | Product | Difference
     Sum/Product   := [(operand_name, Operand)]
     Difference    := source variable name (differenced across a grid axis)
-    Reciprocal    := source variable name (safe 1/x)
     Operand       := Constant | VarRef | Term
 
 A ``Term`` may carry more than one ``Operation`` (e.g. a bulk ``Product`` and an
@@ -58,13 +57,6 @@ class Difference:
 
 
 @dataclass(frozen=True)
-class Reciprocal:
-    """Safe reciprocal (1/x with zeros mapped to infinity) of a variable."""
-    source: str   # name of the variable to invert
-    kind = "reciprocal"
-
-
-@dataclass(frozen=True)
 class Term:
     """A node in a budget tree: a named quantity defined by its operations.
 
@@ -77,7 +69,7 @@ class Term:
         ``("heat", "rhs", "diffusion", "lateral")``. Used as the canonical
         identity and to derive output variable names.
     operations : tuple of Operation
-        One or more of Sum/Product/Difference/Reciprocal. The first operation
+        One or more of Sum/Product/Difference. The first sum/product operation
         provides the term's primary value.
     explicit_var : str or None
         A pre-named output variable, if the convention pinned one (rare).
@@ -97,6 +89,6 @@ class Budget:
 
 
 # Operations that introduce a single source operand rather than named terms.
-UNARY_OPS = {"difference": Difference, "reciprocal": Reciprocal}
+UNARY_OPS = {"difference": Difference}
 NARY_OPS = {"sum": Sum, "product": Product}
 OPERATION_KEYS = set(UNARY_OPS) | set(NARY_OPS)

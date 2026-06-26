@@ -10,7 +10,9 @@ def load_preset_budget(model="MOM6"):
     Parameters
     ----------
     model : str (default "MOM6")
-      Currently supported models: ["MOM6"]
+      Name of any convention shipped in ``xbudget/conventions/`` (without the
+      ``.yaml`` suffix). Currently: "MOM6", "MOM6_3Donly", "MOM6_drift",
+      "MOM6_surface".
       Please open an Issue if you would like to contribute an xbudget yaml
       file for a new model–see /conventions/ for examples.
 
