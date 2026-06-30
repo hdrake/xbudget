@@ -24,18 +24,18 @@ import xbudget
 from xbudget.parse import parse_budgets
 from xbudget.evaluate import evaluate_budgets
 
-OPS = {"sum", "product", "difference", "reciprocal"}
+OPS = {"sum", "product", "difference", "reciprocal", "lateral_divergence"}
 RTOL = 1e-9
 
-DATA_PATH = os.path.normpath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-        "data",
-        "MOM6_global_example_diagnostics_zlevels_v0_0_6.nc",
+
+def _data(name):
+    return os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "data", name)
     )
-)
+
+
+DATA_PATH = _data("MOM6_global_example_diagnostics_zlevels_v0_0_6.nc")
+ECCO_DATA_PATH = _data("ECCO_budget_terms.nc")
 
 
 def _run_legacy(build_grid, preset):
@@ -209,3 +209,66 @@ def test_equivalent_on_mom6_example():
     # 108 legacy variables collapse to 57 operation-named variables.
     assert len(records) == 57
     assert len(alias_map) == 108
+
+
+# ECCOv4r4 LLC90 face connectivity (13 tiles), mirroring
+# examples/load_example_ecco_grid.py.
+_ECCO_FACE_CONNECTIONS = {
+    "tile": {
+        0: {"X": ((12, "Y", False), (3, "X", False)), "Y": (None, (1, "Y", False))},
+        1: {"X": ((11, "Y", False), (4, "X", False)), "Y": ((0, "Y", False), (2, "Y", False))},
+        2: {"X": ((10, "Y", False), (5, "X", False)), "Y": ((1, "Y", False), (6, "X", False))},
+        3: {"X": ((0, "X", False), (9, "Y", False)), "Y": (None, (4, "Y", False))},
+        4: {"X": ((1, "X", False), (8, "Y", False)), "Y": ((3, "Y", False), (5, "Y", False))},
+        5: {"X": ((2, "X", False), (7, "Y", False)), "Y": ((4, "Y", False), (6, "Y", False))},
+        6: {"X": ((2, "Y", False), (7, "X", False)), "Y": ((5, "Y", False), (10, "X", False))},
+        7: {"X": ((6, "X", False), (8, "X", False)), "Y": ((5, "X", False), (10, "Y", False))},
+        8: {"X": ((7, "X", False), (9, "X", False)), "Y": ((4, "X", False), (11, "Y", False))},
+        9: {"X": ((8, "X", False), None), "Y": ((3, "X", False), (12, "Y", False))},
+        10: {"X": ((6, "Y", False), (11, "X", False)), "Y": ((7, "Y", False), (2, "X", False))},
+        11: {"X": ((10, "X", False), (12, "X", False)), "Y": ((8, "Y", False), (1, "X", False))},
+        12: {"X": ((11, "X", False), None), "Y": ((9, "Y", False), (0, "X", False))},
+    }
+}
+
+
+def _build_ecco_grid():
+    ds = xr.open_dataset(ECCO_DATA_PATH).fillna(0.0)
+    return xgcm.Grid(
+        ds,
+        coords={
+            "X": {"center": "i", "left": "i_g"},
+            "Y": {"center": "j", "left": "j_g"},
+            "T": {"center": "time", "outer": "time_bounds"},
+            "Z": {"center": "k", "left": "k_l"},
+        },
+        metrics={
+            ("X",): ["dxG"],
+            ("Y",): ["dyG"],
+            ("Z",): ["drF"],
+            ("X", "Y"): ["rA", "rAw", "rAs"],
+        },
+        boundary={"X": None, "Y": None, "Z": "fill", "T": None},
+        periodic=False,
+        fill_value={"Z": 0.0},
+        face_connections=_ECCO_FACE_CONNECTIONS,
+        autoparse_metadata=False,
+    )
+
+
+@pytest.mark.skipif(
+    not os.path.exists(ECCO_DATA_PATH),
+    reason="example ECCO LLC90 dataset not present (download from Zenodo to run)",
+)
+def test_equivalent_on_ecco_native_example():
+    """The typed engine reproduces the legacy engine on the LLC90 ECCO budget.
+
+    Exercises reciprocal, difference-of-sub-term, and the native-xgcm
+    lateral_divergence on a face-connected (13-tile) grid. Slow (full 1.6 GB
+    grid); skipped unless the data file is present.
+    """
+    records, alias_map = _assert_equivalent(
+        _build_ecco_grid, xbudget.load_preset_budget("ECCOV4r4_native")
+    )
+    assert len(records) == 71
+    assert len(alias_map) == 132
