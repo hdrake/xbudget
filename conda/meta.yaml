@@ -1,5 +1,5 @@
 {% set name = "xbudget" %}
-{% set version = "0.6.2" %}
+{% set version = "0.7.0" %}
 {% set python_min = "3.11" %}
 
 package:
@@ -8,7 +8,8 @@ package:
 
 source:
   url: https://pypi.org/packages/source/x/xbudget/xbudget-{{ version }}.tar.gz
-  sha256: 0ab9571aae2196523c0dbc394468567446d61e475624921055a3b1e074c05112
+  # TODO(release): regenerate against the published 0.7.0 sdist.
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
 
 build:
   noarch: python
