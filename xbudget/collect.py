@@ -17,6 +17,7 @@ __all__ = [
     "get_vars",
     "flatten",
     "flatten_lol",
+    "lateral_divergence",
 ]
 
 def _warn_missing_variable(name):
@@ -28,6 +29,23 @@ def _warn_missing_variable(name):
         UserWarning,
     )
 
+def lateral_divergence(grid, Fx, Fy):
+    """Horizontal flux divergence ``div(Fx, Fy)`` on cell centers, via xgcm.
+
+    Uses ``grid.diff`` with a vector ``other_component`` so face-connected
+    topologies (e.g. the LLC tiles of ECCO) are stitched correctly. This
+    reproduces the previously hand-rolled LLC90 flux stitching exactly, for any
+    grid topology xgcm supports.
+    """
+    if grid is None:
+        raise ValueError(
+            "Input `data` must be an `xgcm.Grid` instance when using "
+            "`lateral_divergence` operations."
+        )
+    dFx = grid.diff({"X": Fx}, "X", other_component={"Y": Fy})
+    dFy = grid.diff({"Y": Fy}, "Y", other_component={"X": Fx})
+    return dFx + dFy
+
 def aggregate(xbudget_dict, decompose=[]):
     """Aggregate xbudget dictionary into simpler root-level budgets.
 
@@ -35,7 +53,8 @@ def aggregate(xbudget_dict, decompose=[]):
         This reads the ``var`` fields that the engine fills in, so it only
         returns meaningful results after a legacy run, i.e.
         ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. The
-        default ``name_scheme="v1"`` does not mutate the recipe.
+        default ``name_scheme="v1"`` does not mutate the recipe; query its output
+        via the ``records``/``alias_map`` from ``evaluate_budgets`` instead.
 
     Parameters
     ----------
@@ -106,8 +125,6 @@ def aggregate(xbudget_dict, decompose=[]):
 def disaggregate(b, decompose=[]):
     """Disaggregate variable's provenance dictionary into summed parts
 
-    Operates on a filled recipe (see the note on :func:`aggregate`).
-
     Parameters
     ----------
     b : xbudget sub-dictionary for a variable
@@ -134,7 +151,7 @@ def disaggregate(b, decompose=[]):
         },
         "var": "heat_rhs",
     }
-    >>> xbudget.disaggregate(b)
+    >>> {'advection': 'advective_tendency'}
     {'advection': 'advective_tendency'}
 
     >>> xbudget.disaggregate(b, decompose="advection")
@@ -201,7 +218,7 @@ def collect_budgets(data, xbudget_dict, allow_rechunk=True, name_scheme="v1"):
     data : xgcm.Grid or xr.Dataset
         Budget diagnostics to read from and write derived variables into,
         modified in place. A grid is required if the convention uses
-        ``difference`` operations.
+        ``difference`` or ``lateral_divergence`` operations.
     xbudget_dict : dict
         A convention in xbudget format (e.g. from ``load_preset_budget``).
     allow_rechunk : bool (default: True)
@@ -251,10 +268,9 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
     """Recursively fill xbudget dictionary (legacy engine).
 
     .. deprecated::
-        ``budget_fill_dict`` is the historical dict-walking engine, retained as
-        a reference implementation. Prefer :func:`collect_budgets`, which is
-        backed by the typed expression tree (:mod:`xbudget.nodes`) and does not
-        mutate the recipe dict. This function mutates both ``data`` and
+        The historical dict-walking engine, retained as the reference
+        implementation behind ``name_scheme="legacy"``. Prefer
+        :func:`collect_budgets` (typed engine); this mutates both ``data`` and
         ``xbudget_dict`` in place.
 
     Parameters
@@ -335,6 +351,55 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             # keep record of the first-listed variable
             if var_pref is None:
                 var_pref = var.copy()
+        
+        if k == "reciprocal":
+            v_term = [v_term for k_term, v_term in v.items() if k_term != "var"][0]
+            if v_term['var'] not in ds:
+                _warn_missing_variable(v_term['var'])
+                continue
+
+            #A safe reciprocal that filters zeros out. 
+            var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
+
+            var_name = f"{namepath}_reciprocal"
+            var = var.rename(var_name)
+            var.attrs["provenance"] = v_term['var']
+            ds[var_name] = var
+            if v['var'] is None:
+                v['var'] = var_name
+            if xbudget_dict["var"] is None:
+                var_copy = var.copy()
+                var_copy.attrs["provenance"] = var_name
+                xbudget_dict["var"] = namepath
+                if namepath not in ds:
+                    ds[namepath] = var_copy
+            if var_pref is None:
+                var_pref = var.copy()
+
+        if k == "lateral_divergence":
+            Fx = budget_fill_dict(data, v["Fx"], f"{namepath}_Fx", allow_rechunk=allow_rechunk)
+            Fy = budget_fill_dict(data, v["Fy"], f"{namepath}_Fy", allow_rechunk=allow_rechunk)
+            if Fx is None or Fy is None:
+                warnings.warn(f"Could not compute fluxes for {namepath}, skipping.")
+                continue
+
+            var = lateral_divergence(grid, Fx, Fy)
+            var_name = f"{namepath}_lateral_divergence"
+            var = var.rename(var_name)
+            var.attrs["provenance"] = [Fx.name, Fy.name]
+            ds[var_name] = var
+            if v["var"] is None:
+                v["var"] = var_name
+
+            if xbudget_dict["var"] is None:
+                var_copy = var.copy()
+                var_copy.attrs["provenance"] = var_name
+                xbudget_dict["var"] = namepath
+                if namepath not in ds:
+                    ds[namepath] = var_copy
+            
+            if var_pref is None:
+                var_pref = var.copy()
 
         if k == "difference":
             if grid is None:
@@ -347,12 +412,18 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
                 for pos,c in ax.coords.items()
                 if pos!="center"
             }
-            v_term = [v_term for k_term,v_term in v.items() if k_term!="var"][0]
-            if v_term not in ds:
-                _warn_missing_variable(v_term)
-                continue
+            k_term, v_term = [(k_term, v_term) for k_term, v_term in v.items() if k_term != "var"][0]
+            if isinstance(v_term, dict):
+                source = budget_fill_dict(data, v_term, f"{namepath}_difference_{k_term}", allow_rechunk = allow_rechunk)
+                if source is None:
+                    continue
+            else:
+                if v_term not in ds:
+                    _warn_missing_variable(v_term)
+                    continue
+                source = ds[v_term]
 
-            candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in ds[v_term].dims]
+            candidate_axes = [axn for (axn,c) in staggered_axes.items() if c in source.dims]
             if len(candidate_axes) == 1:
                 axis = candidate_axes[0]
             else:
@@ -360,33 +431,35 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
 
             if allow_rechunk:
                 try: #extract original chunks when possible
-                    #not using ds[v_term] since it may not have the non-staggered dimension chunks. 
+                    #not using source since it may not have the non-staggered dimension chunks.
                     original_chunks = dict(ds.chunksizes)
                 except Exception:
                     warnings.warn("Dataset chunks are inconsistent; using unify_chunks()", UserWarning)
                     original_chunks = dict(ds.unify_chunks().chunksizes)
 
                 # Find the staggered dimension for the given axis in the DataArray
-                axis_dim = [d for d in ds[v_term].dims if d in grid.axes[axis].coords.values()]
+                axis_dim = [d for d in source.dims if d in grid.axes[axis].coords.values()]
                 if len(axis_dim) != 1:
-                    raise ValueError(f"Expected to find one dimension for axis '{axis}' in variable '{v_term}', but found {len(axis_dim)}: {axis_dim}")
+                    raise ValueError(f"Expected to find one dimension for axis '{axis}' in variable '{source.name}', but found {len(axis_dim)}: {axis_dim}")
                 axis_dim = axis_dim[0]
             
                 # Temporarily rechunk to put the difference dim in a single chunk, all other chunks are auto.
-                temporary_chunks = {axis_dim: -1, **{d: "auto" for d in ds[v_term].dims if d != axis_dim}}
-                var = grid.diff(ds[v_term].chunk(temporary_chunks).fillna(0.0), axis=axis)
+                temporary_chunks = {axis_dim: -1, **{d: "auto" for d in source.dims if d != axis_dim}}
+                var = grid.diff(source.chunk(temporary_chunks).fillna(0.0), axis=axis)
                 # Attempt original chunking for preserved dimensions
                 var = var.chunk({d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims})
             else:
-                var = grid.diff(ds[v_term].fillna(0.), axis)
+                var = grid.diff(source.fillna(0.), axis)
 
             var_name = f"{namepath}_difference"
             var = var.rename(var_name)
-            var_provenance = v_term
+            var_provenance = source.name
             var.attrs["provenance"] = var_provenance
             ds[var_name] = var
             if var_pref is None:
                 var_pref = var.copy()
+
+
 
     return var_pref
 
@@ -397,7 +470,7 @@ def get_vars(xbudget_dict, terms):
         Reads the ``var`` fields filled in by a legacy run, i.e.
         ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. For the
         default ``name_scheme="v1"`` engine, query the ``records``/``alias_map``
-        returned by :func:`xbudget.evaluate.evaluate_budgets` and the
+        from :func:`xbudget.evaluate.evaluate_budgets` and the
         ``provenance``/``xbudget_path`` variable attributes instead.
 
     Parameters

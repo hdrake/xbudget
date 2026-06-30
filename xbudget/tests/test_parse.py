@@ -73,7 +73,7 @@ def test_parses_multi_operation_term():
     sum_op = term.operations[1]
     (_, sub_term) = sum_op.terms[0]
     assert isinstance(sub_term, Term)
-    assert sub_term.operations[0] == Difference(source="umo")
+    assert sub_term.operations[0] == Difference(operand=VarRef("umo"))
 
 
 def test_metadata_preserved_and_not_treated_as_side():
@@ -94,15 +94,35 @@ def test_none_operand_is_skipped():
     [
         "not a dict",
         {"heat": "not a dict"},
-        {"heat": {"rhs": {"var": None, "bogus": {}}}},
-        {"heat": {"rhs": {"var": None, "difference": {"a": "x", "b": "y"}}}},
-        {"heat": {"rhs": {"var": None, "difference": {"a": 3}}}},
         {"heat": {"rhs": {"var": None, "sum": "not a dict"}}},
+        {"heat": {"rhs": {"var": None, "difference": "not a dict"}}},
     ],
 )
-def test_invalid_conventions_raise(bad):
+def test_structural_errors_raise(bad):
+    """Genuinely malformed structure (non-dict where a mapping is required)."""
     with pytest.raises(BudgetParseError):
         parse_budgets(bad)
+
+
+@pytest.mark.parametrize(
+    "tolerated",
+    [
+        # unknown key on a term (e.g. a scalar left without its enclosing product)
+        {"heat": {"rhs": {"var": None, "bogus": 1.0}}},
+        # difference / unary op with an unavailable (null) or ambiguous source
+        {"heat": {"rhs": {"var": None, "difference": {"a": "x", "b": "y"}}}},
+        {"heat": {"rhs": {"var": None, "difference": {"a": None}}}},
+    ],
+)
+def test_tolerated_malformations_warn_and_skip(tolerated):
+    """The parser mirrors the legacy engine: it warns and skips placeholders /
+    malformed-but-ignorable terms rather than failing, so real conventions that
+    contain unavailable-diagnostic placeholders still load."""
+    with pytest.warns(UserWarning):
+        budgets = parse_budgets(tolerated)
+    # the offending operation is skipped, leaving the term with no operations
+    rhs = budgets["heat"].sides["rhs"]
+    assert rhs.operations == ()
 
 
 @pytest.mark.parametrize("path", CONVENTIONS)

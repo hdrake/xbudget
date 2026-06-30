@@ -51,9 +51,33 @@ class Product:
 
 @dataclass(frozen=True)
 class Difference:
-    """Finite-difference a staggered variable across its grid axis."""
-    source: str   # name of the variable to difference
+    """Finite-difference a staggered quantity across its grid axis.
+
+    ``operand`` is either a :class:`VarRef` (a raw diagnostic) or a nested
+    :class:`Term` (a quantity computed first, then differenced) — both expose a
+    ``.name`` for legacy naming.
+    """
+    operand: object
     kind = "difference"
+
+
+@dataclass(frozen=True)
+class Reciprocal:
+    """Safe reciprocal (1/x with zeros mapped to infinity) of a variable."""
+    source: str   # name of the variable to invert
+    kind = "reciprocal"
+
+
+@dataclass(frozen=True)
+class LateralDivergence:
+    """Horizontal flux divergence ``div(Fx, Fy)`` of two flux sub-terms.
+
+    Evaluated on cell centers with native xgcm so face-connected (e.g. LLC)
+    topologies are handled correctly.
+    """
+    fx: object  # Term producing the X-face flux
+    fy: object  # Term producing the Y-face flux
+    kind = "lateral_divergence"
 
 
 @dataclass(frozen=True)
@@ -88,7 +112,9 @@ class Budget:
     sides: dict  # {"lhs": Term, "rhs": Term} (either may be absent)
 
 
-# Operations that introduce a single source operand rather than named terms.
-UNARY_OPS = {"difference": Difference}
+# Operations that introduce a single source variable rather than named terms.
+UNARY_OPS = {"difference": Difference, "reciprocal": Reciprocal}
 NARY_OPS = {"sum": Sum, "product": Product}
-OPERATION_KEYS = set(UNARY_OPS) | set(NARY_OPS)
+# Operations with their own bespoke operand shape (handled specially in parse).
+SPECIAL_OPS = {"lateral_divergence": LateralDivergence}
+OPERATION_KEYS = set(UNARY_OPS) | set(NARY_OPS) | set(SPECIAL_OPS)

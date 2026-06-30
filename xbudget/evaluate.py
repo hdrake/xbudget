@@ -15,18 +15,21 @@ import warnings
 from functools import reduce
 from operator import mul
 
+import numpy as np
 import xarray as xr
 import xgcm
 
 from .nodes import (
     Constant,
     Difference,
+    LateralDivergence,
     Product,
+    Reciprocal,
     Sum,
     Term,
     VarRef,
 )
-from .collect import _warn_missing_variable
+from .collect import _warn_missing_variable, lateral_divergence
 
 
 def _new_name(path):
@@ -126,8 +129,8 @@ class _Evaluator:
             }
             if is_primary:
                 # The legacy engine also emitted a plain "copy" at the namepath
-                # for sum/product terms (but not for a lone difference).
-                if op.kind in ("sum", "product"):
+                # for every operation except a lone difference.
+                if op.kind != "difference":
                     self.alias_map[legacy_namepath] = new_name
                     self.records[new_name]["legacy_copy"] = legacy_namepath
                 primary = out
@@ -140,8 +143,32 @@ class _Evaluator:
         if isinstance(op, (Sum, Product)):
             return self._eval_nary(op, legacy_namepath)
         if isinstance(op, Difference):
-            return self._eval_difference(op)
+            return self._eval_difference(op, legacy_namepath)
+        if isinstance(op, Reciprocal):
+            return self._eval_reciprocal(op)
+        if isinstance(op, LateralDivergence):
+            return self._eval_lateral_divergence(op, legacy_namepath)
         raise TypeError(f"Unknown operation type {type(op).__name__}")
+
+    def _eval_reciprocal(self, op):
+        ds = self.ds
+        if op.source not in ds:
+            _warn_missing_variable(op.source)
+            return None, None
+        var = 1.0 / xr.where(ds[op.source] == 0, np.inf, ds[op.source])
+        return var, op.source
+
+    def _eval_lateral_divergence(self, op, legacy_namepath):
+        fx = self._eval_term(op.fx, f"{legacy_namepath}_Fx")
+        fy = self._eval_term(op.fy, f"{legacy_namepath}_Fy")
+        if fx is None or fy is None:
+            warnings.warn(
+                f"Could not compute fluxes for {legacy_namepath}, skipping.",
+                UserWarning,
+            )
+            return None, None
+        var = lateral_divergence(self.grid, fx, fy)
+        return var, [fx.name, fy.name]
 
     def _eval_nary(self, op, legacy_namepath):
         ds = self.ds
@@ -174,16 +201,27 @@ class _Evaluator:
         provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
         return var, provenance
 
-    def _eval_difference(self, op):
+    def _eval_difference(self, op, legacy_namepath):
         if self.grid is None:
             raise ValueError(
                 "Input `data` must be an `xgcm.Grid` instance when using "
                 "`difference` operations."
             )
         ds = self.ds
-        if op.source not in ds:
-            _warn_missing_variable(op.source)
-            return None, None
+        operand = op.operand
+        if isinstance(operand, VarRef):
+            if operand.name not in ds:
+                _warn_missing_variable(operand.name)
+                return None, None
+            source = ds[operand.name]
+            provenance = operand.name
+        else:  # a computed sub-term, differenced after evaluation
+            source = self._eval_term(
+                operand, f"{legacy_namepath}_difference_{operand.name}"
+            )
+            if source is None:
+                return None, None
+            provenance = source.name
 
         staggered_axes = {
             axn: c
@@ -192,7 +230,7 @@ class _Evaluator:
             if pos != "center"
         }
         candidate_axes = [
-            axn for (axn, c) in staggered_axes.items() if c in ds[op.source].dims
+            axn for (axn, c) in staggered_axes.items() if c in source.dims
         ]
         if len(candidate_axes) != 1:
             raise ValueError(
@@ -211,29 +249,29 @@ class _Evaluator:
                 original_chunks = dict(ds.unify_chunks().chunksizes)
 
             axis_dim = [
-                d for d in ds[op.source].dims if d in self.grid.axes[axis].coords.values()
+                d for d in source.dims if d in self.grid.axes[axis].coords.values()
             ]
             if len(axis_dim) != 1:
                 raise ValueError(
                     f"Expected to find one dimension for axis '{axis}' in "
-                    f"variable '{op.source}', but found {len(axis_dim)}: {axis_dim}"
+                    f"'{provenance}', but found {len(axis_dim)}: {axis_dim}"
                 )
             axis_dim = axis_dim[0]
 
             temporary_chunks = {
                 axis_dim: -1,
-                **{d: "auto" for d in ds[op.source].dims if d != axis_dim},
+                **{d: "auto" for d in source.dims if d != axis_dim},
             }
             var = self.grid.diff(
-                ds[op.source].chunk(temporary_chunks).fillna(0.0), axis=axis
+                source.chunk(temporary_chunks).fillna(0.0), axis=axis
             )
             var = var.chunk(
                 {d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims}
             )
         else:
-            var = self.grid.diff(ds[op.source].fillna(0.0), axis)
+            var = self.grid.diff(source.fillna(0.0), axis)
 
-        return var, op.source
+        return var, provenance
 
 
 def evaluate_budgets(data, budgets, allow_rechunk=True):

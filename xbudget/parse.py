@@ -6,14 +6,18 @@ offending path instead of surfacing as a deep ``KeyError``/``NameError`` during
 evaluation.
 """
 import numbers
+import warnings
 
 from .nodes import (
     Budget,
     Constant,
+    Difference,
+    LateralDivergence,
+    Reciprocal,
     Term,
     VarRef,
     NARY_OPS,
-    UNARY_OPS,
+    SPECIAL_OPS,
     OPERATION_KEYS,
 )
 
@@ -74,12 +78,26 @@ def _parse_term(node, path, name):
             continue
         if key in NARY_OPS:
             operations.append(_parse_nary(key, value, path))
-        elif key in UNARY_OPS:
-            operations.append(_parse_unary(key, value, path))
+        elif key == "difference":
+            op = _parse_difference(value, path)
+            if op is not None:
+                operations.append(op)
+        elif key == "reciprocal":
+            op = _parse_reciprocal(value, path)
+            if op is not None:
+                operations.append(op)
+        elif key in SPECIAL_OPS:
+            operations.append(_parse_lateral_divergence(value, path))
         else:
-            raise BudgetParseError(
-                f"Unexpected key '{key}' on term at {_fmt(path)}; expected "
-                f"'var' or one of {sorted(OPERATION_KEYS)}."
+            # The legacy engine silently ignores keys that are neither `var`
+            # nor an operation (e.g. a `sign`/`density` scalar left directly on
+            # a term because its enclosing `product:` was omitted). Mirror that
+            # tolerance, but warn so the malformation is visible.
+            warnings.warn(
+                f"Ignoring unexpected key '{key}' on term at {_fmt(path)}; "
+                f"expected 'var' or one of {sorted(OPERATION_KEYS)}. This term "
+                f"may be missing an enclosing operation (e.g. 'product').",
+                UserWarning,
             )
 
     return Term(
@@ -130,29 +148,85 @@ def _parse_operand(value, path, name):
     )
 
 
-def _parse_unary(kind, body, path):
-    """Parse a ``difference`` operation (a single source variable)."""
+def _single_operand(kind, body, path):
+    """Return the single non-``var`` (name, value) of a unary op body, or None.
+
+    Warns and returns ``None`` for the malformed/placeholder cases the legacy
+    engine tolerates (zero or several operands).
+    """
     if not isinstance(body, dict):
         raise BudgetParseError(
             f"'{kind}' at {_fmt(path)} must be a dict, got "
             f"{type(body).__name__}."
         )
-    sources = [(k, v) for k, v in body.items() if k != "var"]
-    if len(sources) != 1:
-        raise BudgetParseError(
-            f"'{kind}' at {_fmt(path)} must reference exactly one variable, "
-            f"found {len(sources)}: {[k for k, _ in sources]}."
+    operands = [(k, v) for k, v in body.items() if k != "var"]
+    if len(operands) != 1:
+        warnings.warn(
+            f"'{kind}' at {_fmt(path)} should reference exactly one operand, "
+            f"found {len(operands)}: {[k for k, _ in operands]}; skipping.",
+            UserWarning,
         )
-    _, source_value = sources[0]
-    # difference references a bare variable name; tolerate a {{var: ...}}
-    # sub-dict form as well.
-    if isinstance(source_value, dict):
-        source = source_value.get("var")
-    else:
-        source = source_value
+        return None
+    return operands[0]
+
+
+def _parse_difference(body, path):
+    """Parse a ``difference`` operation.
+
+    The operand is either a raw variable name (``VarRef``) or a nested term that
+    is computed first and then differenced (``Term``). Returns ``None`` for an
+    unavailable-diagnostic placeholder, matching the legacy engine.
+    """
+    operand = _single_operand("difference", body, path)
+    if operand is None:
+        return None
+    name, value = operand
+    if isinstance(value, str):
+        return Difference(operand=VarRef(value))
+    if isinstance(value, dict):
+        return Difference(operand=_parse_term(value, path + (name,), name))
+    warnings.warn(
+        f"'difference' at {_fmt(path)} operand '{name}' is "
+        f"{type(value).__name__}, not a variable or sub-term; skipping.",
+        UserWarning,
+    )
+    return None
+
+
+def _parse_reciprocal(body, path):
+    """Parse a ``reciprocal`` operation (a single source variable name).
+
+    The operand is a variable name, either bare or wrapped as ``{var: name}``.
+    Returns ``None`` for an unavailable-diagnostic placeholder.
+    """
+    operand = _single_operand("reciprocal", body, path)
+    if operand is None:
+        return None
+    _, value = operand
+    source = value.get("var") if isinstance(value, dict) else value
     if not isinstance(source, str):
-        raise BudgetParseError(
-            f"'{kind}' at {_fmt(path)} must reference a variable name (str), "
-            f"got {type(source).__name__}."
+        warnings.warn(
+            f"'reciprocal' at {_fmt(path)} does not reference a variable name "
+            f"(got {type(source).__name__}); skipping.",
+            UserWarning,
         )
-    return UNARY_OPS[kind](source=source)
+        return None
+    return Reciprocal(source=source)
+
+
+def _parse_lateral_divergence(body, path):
+    """Parse a ``lateral_divergence`` operation (an Fx/Fy flux pair)."""
+    if not isinstance(body, dict):
+        raise BudgetParseError(
+            f"'lateral_divergence' at {_fmt(path)} must be a dict, got "
+            f"{type(body).__name__}."
+        )
+    missing = [c for c in ("Fx", "Fy") if c not in body]
+    if missing:
+        raise BudgetParseError(
+            f"'lateral_divergence' at {_fmt(path)} requires 'Fx' and 'Fy' "
+            f"flux sub-terms; missing {missing}."
+        )
+    fx = _parse_term(body["Fx"], path + ("Fx",), "Fx")
+    fy = _parse_term(body["Fy"], path + ("Fy",), "Fy")
+    return LateralDivergence(fx=fx, fy=fy)
