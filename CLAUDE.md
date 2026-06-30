@@ -38,9 +38,11 @@ Top-level keys are budgets (`mass`, `heat`, `salt`). Each budget has `lhs` and/o
 
 - `sum` — add the child terms together
 - `product` — multiply child terms (scalar numbers allowed as factors, e.g. `density: 1035.`, `sign: -1.`)
-- `difference` — finite-difference a staggered flux across a grid axis (**requires an `xgcm.Grid`**)
+- `difference` — finite-difference across a grid axis (**requires an `xgcm.Grid`**); the operand is a raw variable *or* a computed sub-term
+- `reciprocal` — safe `1/x` (zeros → inf) of a variable
+- `lateral_divergence` — horizontal flux divergence `div(Fx, Fy)` of two flux sub-terms, via native xgcm (`grid.diff` with `other_component` + `face_connections`); works on face-connected LLC grids
 
-A node may carry more than one operation (e.g. a bulk `product` and an equivalent finer `sum`). Leaf string values (`"areacello"`, `"umo"`) are raw diagnostic names. Conventions live in `xbudget/conventions/*.yaml` (`MOM6.yaml` is canonical; also `MOM6_3Donly`, `MOM6_drift`, `MOM6_surface`).
+A node may carry more than one operation (e.g. a bulk `product` and an equivalent finer `sum`). Leaf string values (`"areacello"`, `"umo"`) are raw diagnostic names. Conventions live in `xbudget/conventions/*.yaml` — `MOM6.yaml` (canonical; also `MOM6_3Donly`, `MOM6_drift`, `MOM6_surface`) and `ECCOV4r4_native.yaml` (LLC90 native-grid budgets).
 
 ### The typed engine (parse → evaluate)
 
@@ -48,7 +50,7 @@ A node may carry more than one operation (e.g. a bulk `product` and an equivalen
 xbudget_dict ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets──▶ derived variables + alias map
 ```
 
-- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations.
+- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference`/`Reciprocal`/`LateralDivergence` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations. The native `lateral_divergence` helper lives in `collect.py` and is shared by both engines.
 - **`parse.py`** — `parse_budgets(dict) -> {name: Budget}`. The single source of schema truth; validates and raises `BudgetParseError` naming the offending path on malformed conventions.
 - **`evaluate.py`** — `evaluate_budgets(data, budgets)` walks the tree and materializes **one variable per operation**, named by its term path with operator infixes dropped (e.g. `heat_rhs_diffusion_lateral`). It is pure with respect to the recipe (never mutates it); it only writes derived variables into the dataset. Each variable gets `xbudget_path` (structured identity), `xbudget_op` (the operation kind), and `provenance` (immediate inputs) attrs. Returns `(alias_map, records)` — `alias_map` maps every legacy name to its new name; `records` maps each new variable to its metadata. Dispatch is on node type (`Difference` requires an `xgcm.Grid` in its signature, so a grid-less difference fails fast with a clear error).
 - **`collect.py`** — the public surface:
@@ -61,19 +63,20 @@ xbudget_dict ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_b
 - **Naming changed (major-version cleanup).** `v1` emits one variable per node/operation with operator infixes dropped; the legacy engine emitted duplicate "copy" variables (108 → 57 on the MOM6 example). Use `name_scheme="legacy"` or the `alias_map` to bridge. `CHANGELOG.md` has the old→new table.
 - **Missing diagnostics are skipped with a `UserWarning`, not an error** — a `sum`/`product` containing missing inputs collapses accordingly, so one convention can serve datasets with different available diagnostics.
 - **`difference` rechunking:** `allow_rechunk=True` (default) temporarily rechunks the difference dimension into a single chunk (required by `grid.diff`) then restores chunking.
+- **Lenient parser.** `parse.py` mirrors the legacy engine: it **warns and skips** unavailable-diagnostic placeholders and stray non-operation keys (e.g. a `sign` left without its enclosing `product:`) instead of failing, so real conventions with such terms still load. (This is how the malformed `bolus_mass_flux_convergence` in `ECCOV4r4_native.yaml` is tolerated — and silently dropped — by both engines.)
+- **xgcm version:** `lateral_divergence` needs native face-connected differencing, available only in xgcm **after 0.9.0** (currently the dev `main`). Run/test in an env with that xgcm.
 
 ### Tests
 
-- `test_parse.py` — parser units + validation; asserts all shipped conventions parse.
-- `test_evaluate_equivalence.py` — proves the typed engine is numerically identical to the legacy `budget_fill_dict` (synthetic grid always; MOM6 grid when the data file is present).
+- `test_parse.py` — parser units + validation; asserts all shipped conventions parse; covers the tolerated-malformation path.
+- `test_evaluate_equivalence.py` — proves the typed engine is numerically identical to the legacy `budget_fill_dict`: a synthetic grid (always), the MOM6 grid, and the **ECCO LLC90 grid** (both gated on their data files; the ECCO case exercises reciprocal, difference-of-sub-term, and native `lateral_divergence`).
 - `test_characterization.py` (+ `characterization_MOM6.json`) — golden snapshot of the typed engine's absolute MOM6 output.
 - `test_utilities.py` — the legacy engine, `aggregate`/`get_vars`/`disaggregate`, and `collect_budgets` behavior.
 
 ## Data & examples
 
-- `examples/load_example_model_grid.py` — `load_MOM6_coarsened_diagnostics()` downloads (Zenodo, cached in `data/`) and builds an `xgcm.Grid` with X/Y center/outer coords and `areacello` metrics.
-- `examples/MOM6_budget_examples_mass_heat_salt.ipynb` — worked tutorial; its `collect_budgets` call uses `name_scheme="legacy"` so the rest of the notebook (old names, `get_vars`, `aggregate`) is unchanged.
-- The example `.nc` (~600 MB) is gitignored and fetched on demand; only `data/README.md` is tracked.
+- `examples/load_example_model_grid.py` — `load_MOM6_coarsened_diagnostics()` builds a MOM6 `xgcm.Grid` (X/Y center/outer, `areacello` metric). `examples/load_example_ecco_grid.py` — `load_ECCOV4r4_coarsened_diagnostics()` builds the ECCO **LLC90** grid with 13-tile `face_connections`. Both download from Zenodo, cached in `data/` (gitignored; only `data/README.md` tracked).
+- Notebooks: `MOM6_budget_examples_mass_heat_salt.ipynb`; `eccov4r4_budget_examples_mass_heat_salt.ipynb` (ECCO closure); `eccov4r4_heat_budget_decomposition.ipynb` (ECCO heat decomposition). The ECCO notebooks and the MOM6 one call `collect_budgets(..., name_scheme="legacy")` because they use `get_vars`/`aggregate`.
 
 ## Pull request workflow
 

@@ -5,8 +5,9 @@
 This release replaces the recursive dict-walking engine with a typed expression
 tree (parse → evaluate). The convention/YAML format is **unchanged**; the
 in-memory representation, the engine, and the default output variable names are
-new. Numerical results are identical to the previous engine (verified by an
-end-to-end equivalence test on the example MOM6 grid).
+new. Numerical results are identical to the previous engine — verified by
+end-to-end equivalence tests on the example MOM6 grid (108 → 57 variables) and
+the ECCOv4r4 LLC90 grid (132 → 71 variables, 0 mismatches).
 
 ### Quick migration
 
@@ -61,8 +62,18 @@ unchanged. Adopt the new scheme at your own pace.
 - `xbudget.evaluate_budgets(data, budgets)` → pure evaluator; returns
   `(alias_map, records)` where `alias_map` maps every legacy name to its new
   name and `records` maps each new variable to its `{path, op, ...}` metadata.
-- Each derived variable carries `xbudget_path` (structured identity) and
-  `provenance` (immediate inputs) attributes.
+- Each derived variable carries `xbudget_path` (structured identity),
+  `xbudget_op` (operation kind), and `provenance` (immediate inputs) attributes.
+- **ECCOv4r4 / LLC90 support in the typed engine.** The `reciprocal` and
+  `lateral_divergence` operations and a `difference` of a *computed sub-term*
+  (not just a raw variable) are all handled, so the native-grid ECCO mass/heat/
+  salt budgets evaluate under `name_scheme="v1"`. New `ECCOV4r4_native`
+  convention and example notebooks (`eccov4r4_budget_examples_mass_heat_salt`,
+  `eccov4r4_heat_budget_decomposition`).
+- **`lateral_divergence` now uses native xgcm** (`grid.diff` with
+  `other_component` + `face_connections`) instead of a hand-rolled LLC90 flux
+  stitcher; verified bit-for-bit identical on the ECCO grid. The
+  `xbudget/llc90` module is removed.
 
 ### Fixed
 
@@ -79,9 +90,18 @@ unchanged. Adopt the new scheme at your own pace.
   internally by `name_scheme="legacy"`) but is superseded by `collect_budgets`
   / `evaluate_budgets`.
 
-### Removed
+### Dependencies
 
-- The `reciprocal` operation. It was supported by the engine but used by no
-  shipped convention and exercised by no test; removed from the typed engine,
-  the parser, and the legacy `budget_fill_dict`. It can be reintroduced as a
-  typed node if a future convention needs it.
+- The LLC `lateral_divergence` relies on native face-connected differencing in
+  `xgcm` (`grid.diff` with `other_component`). This is only available in xgcm
+  **after 0.9.0** (currently from the development `main` branch); the
+  `requires-python`/`xgcm` pins should be tightened once a release ships it.
+
+### Parser tolerance
+
+- The parser now **warns and skips** unavailable-diagnostic placeholders and
+  terms with stray keys (e.g. a `sign`/`density` left without its enclosing
+  `product:`), mirroring the legacy engine's behavior, rather than failing. This
+  surfaces (without breaking on) the `bolus_mass_flux_convergence` term in the
+  shipped `ECCOV4r4_native` convention, which is missing its `product:` wrapper
+  and is therefore silently dropped from the mass budget by both engines.

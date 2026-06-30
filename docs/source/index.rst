@@ -11,7 +11,7 @@ xbudget expects budgets which have a Left-Hand Side (LHS) equal to a Right-Hand 
 
 where :math:`\lambda` is the property density (or tracer concentration), :math:`\mathbf{u}` is the flow velocity, and :math:`\mathbf{F}_{\lambda}` is the sum of all non-advective fluxes of :math:`\lambda`.
 
-xbudget ingests an `xgcm.Grid` object containing the budget diagnostics and uses structured metadata, in the form of a nested dictionary (or `.yaml` file), to close such budgets. While this may seem trivial for use cases in which there is a single flux to keep track of, total non-advective fluxes in general circulation models can be composed of dozens of contributing processes. Since budget diagnostics are often not output as volume-integrated tendencies, xbudget allows for terms to be derived as sums, products, or differences (or some combination of these). For example, ocean heat tendency due to air-sea heat fluxes might be derived from the difference between vertical heat fluxes across depth interfaces, summed over longwave, shortwave, sensible, and latent components of the flux, and multiplied by the ocean cell area.
+xbudget ingests an `xgcm.Grid` object containing the budget diagnostics and uses structured metadata, in the form of a nested dictionary (or `.yaml` file), to close such budgets. While this may seem trivial for use cases in which there is a single flux to keep track of, total non-advective fluxes in general circulation models can be composed of dozens of contributing processes. Since budget diagnostics are often not output as volume-integrated tendencies, xbudget allows for terms to be derived as sums, products, differences, reciprocals, or lateral flux divergences (or some combination of these), including on face-connected grids such as the ECCO LLC90 tiles. For example, ocean heat tendency due to air-sea heat fluxes might be derived from the difference between vertical heat fluxes across depth interfaces, summed over longwave, shortwave, sensible, and latent components of the flux, and multiplied by the ocean cell area.
 
 While drafting a `.yaml` file from scratch for a new model can be daunting, it only needs to be done once -- then closing budgets is a breeze!
 
@@ -22,3 +22,4 @@ While drafting a `.yaml` file from scratch for a new model can be daunting, it o
    installation
    examples/MOM6_budget_examples_mass_heat_salt
    examples/eccov4r4_budget_examples_mass_heat_salt
+   examples/eccov4r4_heat_budget_decomposition
