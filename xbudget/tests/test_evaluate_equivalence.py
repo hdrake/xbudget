@@ -270,5 +270,7 @@ def test_equivalent_on_ecco_native_example():
     records, alias_map = _assert_equivalent(
         _build_ecco_grid, xbudget.load_preset_budget("ECCOV4r4_native")
     )
-    assert len(records) == 71
-    assert len(alias_map) == 132
+    assert len(records) == 75
+    assert len(alias_map) == 140
+    # the (previously dropped) lateral eddy-bolus convergence is materialized
+    assert "mass_rhs_advection_lateral_bolus_mass_flux_convergence" in records

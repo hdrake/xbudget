@@ -7,7 +7,7 @@ tree (parse → evaluate). The convention/YAML format is **unchanged**; the
 in-memory representation, the engine, and the default output variable names are
 new. Numerical results are identical to the previous engine — verified by
 end-to-end equivalence tests on the example MOM6 grid (108 → 57 variables) and
-the ECCOv4r4 LLC90 grid (132 → 71 variables, 0 mismatches).
+the ECCOv4r4 LLC90 grid (140 → 75 variables, 0 mismatches).
 
 ### Quick migration
 
@@ -77,6 +77,13 @@ unchanged. Adopt the new scheme at your own pace.
 
 ### Fixed
 
+- **ECCO mass budget: the lateral eddy-bolus transport was silently dropped.**
+  The `bolus_mass_flux_convergence` term in `ECCOV4r4_native.yaml` was missing
+  its enclosing `product:` wrapper, so its `sign`/`density`/`volume_flux_divergence`
+  children sat directly on the term and were ignored — the GM bolus velocity
+  (`UVELSTAR`/`VVELSTAR`) contributed nothing to the mass budget. The wrapper is
+  now restored, so the bolus convergence is materialized and included. **This
+  changes ECCO mass-budget results** (the bolus term is no longer zero).
 - The `difference` operation's grid guard was misattached, so a `difference`
   on a plain `Dataset` raised an opaque `NameError`, and a `difference` term
   evaluated after another operation in the same node raised spuriously even
@@ -99,9 +106,9 @@ unchanged. Adopt the new scheme at your own pace.
 
 ### Parser tolerance
 
-- The parser now **warns and skips** unavailable-diagnostic placeholders and
-  terms with stray keys (e.g. a `sign`/`density` left without its enclosing
-  `product:`), mirroring the legacy engine's behavior, rather than failing. This
-  surfaces (without breaking on) the `bolus_mass_flux_convergence` term in the
-  shipped `ECCOV4r4_native` convention, which is missing its `product:` wrapper
-  and is therefore silently dropped from the mass budget by both engines.
+- The parser **warns and skips** unavailable-diagnostic placeholders (e.g. a
+  `difference` whose source is `null`) and terms with stray non-operation keys,
+  mirroring the legacy engine's behavior rather than failing, so real
+  conventions with such placeholders still load. (This same tolerance is what
+  let the malformed bolus term above pass silently before it was fixed — the
+  warning it emitted is what surfaced the bug.)
