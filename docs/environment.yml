@@ -10,6 +10,7 @@ dependencies:
   - matplotlib
   - myst-parser
   - netcdf4
+  - pandoc  # nbsphinx needs it to convert the notebooks
   - pydap
   - pytest
   - sphinx
