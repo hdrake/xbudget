@@ -71,8 +71,10 @@ jobs:
           auto-activate-base: false
 
       - name: Set up conda environment
+        # `conda`, not `mamba`: setup-miniconda already selects the libmamba
+        # solver, so this resolves just as fast without installing mamba first.
         run: |
-          mamba env update -f docs/environment.yml
+          conda env update -f docs/environment.yml
           python -m pip install -e .
 
       - name: Build docs
