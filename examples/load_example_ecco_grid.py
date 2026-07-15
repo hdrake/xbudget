@@ -71,15 +71,20 @@ def construct_grid(ds):
         ("X", "Y"): ["rA", "rAw", "rAs"],            # horizontal areas (cell center, west-face, south-face)
     }
 
-    boundary = {"X":None, "Y":None, "Z": "fill", "T":None}
-    fill_value = {"Z": 0.0}
+    # xgcm >= 0.10 replaced `boundary` with `padding` and removed `periodic`;
+    # the previous `periodic=False` is equivalent to padding="fill". X and Y
+    # only pad at the outer edges of the LLC tiling, since `face_connections`
+    # supplies the halo everywhere the 13 tiles meet.
+    padding = {"X": "fill", "Y": "fill", "Z": "fill", "T": "fill"}
+    # Set for every axis, not just Z: xgcm's default fill_value is changing from
+    # 0.0 to nan, and these budgets rely on padded edges contributing zero.
+    fill_value = 0.0
 
     grid = xgcm.Grid(
         ds,
         coords=coords,
         metrics=metrics,
-        boundary=boundary,
-        periodic = False,
+        padding=padding,
         fill_value=fill_value,
         face_connections=face_connections,
         autoparse_metadata=False,

@@ -4,13 +4,16 @@ channels:
 dependencies:
   - python=3.12
   - cftime
+  - dask
   - ipython
   - jupyterlab
   - matplotlib
+  - myst-parser
   - netcdf4
   - pydap
   - pytest
   - sphinx
   - nbsphinx
   - ipykernel
+  - xgcm>=0.10.0
   - pip

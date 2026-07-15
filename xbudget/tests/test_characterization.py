@@ -73,7 +73,7 @@ def _build_example_grid():
         ds,
         coords=coords,
         metrics={("X", "Y"): "areacello"},
-        boundary={"X": "periodic", "Y": "extend"},
+        padding={"X": "periodic", "Y": "extend"},
         autoparse_metadata=False,
     )
 

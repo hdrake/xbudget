@@ -5,7 +5,9 @@ channels:
 dependencies:
   - python>=3.11
   - cftime
+  - dask
   - netcdf4
   - pydap
   - pytest
+  - xgcm>=0.10.0
   - pip

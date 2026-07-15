@@ -265,9 +265,15 @@ class _Evaluator:
             var = self.grid.diff(
                 source.chunk(temporary_chunks).fillna(0.0), axis=axis
             )
-            var = var.chunk(
-                {d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims}
-            )
+            # Restore the original chunking of the dimensions we know; leave any
+            # others as `grid.diff` produced them. Only naming the dims we want
+            # changed avoids reading `var.chunksizes`, which raises when the
+            # result's coords are chunked differently from its data.
+            restore = {
+                d: original_chunks[d] for d in var.dims if d in original_chunks
+            }
+            if restore:
+                var = var.chunk(restore)
         else:
             var = self.grid.diff(source.fillna(0.0), axis)
 

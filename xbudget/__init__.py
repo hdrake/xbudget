@@ -3,4 +3,5 @@ from .presets import *
 from .collect import *
 from .parse import parse_budgets, BudgetParseError
 from .evaluate import evaluate_budgets
+from .query import BudgetQuery
 from .version import __version__

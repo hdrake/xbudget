@@ -6,10 +6,13 @@ variables. These tests run both engines on the same data and assert that every
 new variable matches its legacy counterpart (mapped via the alias map) to
 floating-point tolerance.
 
-Two fixtures are used:
+Three grids are used:
 - a tiny synthetic grid that always runs (covers sum/product/difference,
-  multi-operation terms, and missing-variable handling);
-- the full example MOM6 grid, skipped when the (~600 MB) file is absent.
+  multi-operation terms, and missing-variable handling), from ``conftest.py``;
+- the full example MOM6 grid, skipped when the (~600 MB) file is absent;
+- the ECCO LLC90 grid, skipped when the (~1.6 GB) file is absent — the only
+  coverage of ``reciprocal``, difference-of-a-sub-term, and face-connected
+  ``lateral_divergence``.
 """
 import copy
 import os
@@ -110,64 +113,8 @@ def _assert_equivalent(build_grid, preset):
     return records, alias_map
 
 
-def _build_synthetic_grid():
-    """A small chunked grid exercising sum, product, and difference."""
-    rng = np.random.RandomState(0)
-    ds = xr.Dataset(
-        {
-            "flux": xr.DataArray(rng.rand(5, 3), dims=("x_g", "y_c")),
-            "diag_a": xr.DataArray(rng.rand(4, 3), dims=("x_c", "y_c")),
-            "diag_b": xr.DataArray(rng.rand(4, 3), dims=("x_c", "y_c")),
-            "area": xr.DataArray(rng.rand(4, 3) + 1.0, dims=("x_c", "y_c")),
-        },
-        coords={
-            "x_g": np.arange(5),
-            "x_c": np.arange(4) + 0.5,
-            "y_c": np.arange(3),
-        },
-    ).chunk({"x_c": 2, "x_g": 2, "y_c": 3})
-    return xgcm.Grid(
-        ds,
-        coords={"X": {"center": "x_c", "left": "x_g"}},
-        periodic=False,
-        autoparse_metadata=False,
-    )
-
-
-SYNTHETIC_PRESET = {
-    "tracer": {
-        "rhs": {
-            "var": None,
-            "sum": {
-                "var": None,
-                "diffusion": {
-                    "var": None,
-                    "product": {"var": None, "sign": -1.0, "d": "diag_a", "area": "area"},
-                },
-                # multi-operation term: a bulk product AND a finer sum
-                "boundary": {
-                    "var": None,
-                    "product": {"var": None, "d": "diag_b", "area": "area"},
-                    "sum": {
-                        "var": None,
-                        "convergence": {
-                            "var": None,
-                            "difference": {"var": None, "transport": "flux"},
-                        },
-                    },
-                },
-                # leaf term: var references an existing diagnostic directly
-                "direct": {"var": "diag_a"},
-                # references a diagnostic absent from the dataset
-                "missing": {"var": None, "product": {"var": None, "d": "not_present"}},
-            },
-        }
-    }
-}
-
-
-def test_equivalent_on_synthetic_grid():
-    records, alias_map = _assert_equivalent(_build_synthetic_grid, SYNTHETIC_PRESET)
+def test_equivalent_on_synthetic_grid(synthetic_grid_builder, synthetic_preset):
+    records, alias_map = _assert_equivalent(synthetic_grid_builder, synthetic_preset)
     # The simplified names drop operator infixes and the redundant copies.
     assert "tracer_rhs" in records
     assert "tracer_rhs_diffusion" in records
@@ -193,7 +140,7 @@ def _build_mom6_grid():
         ds,
         coords={"X": {"center": "xh", "outer": "xq"}, "Y": {"center": "yh", "outer": "yq"}},
         metrics={("X", "Y"): "areacello"},
-        boundary={"X": "periodic", "Y": "extend"},
+        padding={"X": "periodic", "Y": "extend"},
         autoparse_metadata=False,
     )
 
@@ -248,9 +195,8 @@ def _build_ecco_grid():
             ("Z",): ["drF"],
             ("X", "Y"): ["rA", "rAw", "rAs"],
         },
-        boundary={"X": None, "Y": None, "Z": "fill", "T": None},
-        periodic=False,
-        fill_value={"Z": 0.0},
+        padding={"X": "fill", "Y": "fill", "Z": "fill", "T": "fill"},
+        fill_value=0.0,  # every axis: xgcm's default is changing 0.0 -> nan
         face_connections=_ECCO_FACE_CONNECTIONS,
         autoparse_metadata=False,
     )
@@ -274,3 +220,76 @@ def test_equivalent_on_ecco_native_example():
     assert len(alias_map) == 140
     # the (previously dropped) lateral eddy-bolus convergence is materialized
     assert "mass_rhs_advection_lateral_bolus_mass_flux_convergence" in records
+
+
+def _assert_aggregate_equivalent(build_grid, preset, decompose):
+    """v1 BudgetQuery.aggregate names the same terms, holding the same data.
+
+    The names differ by design; the arrays behind them must not. This is the
+    query-layer analogue of _assert_equivalent, on a real convention.
+    """
+    legacy_preset = copy.deepcopy(preset)
+    legacy_grid = build_grid()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        xbudget.collect_budgets(legacy_grid, legacy_preset, name_scheme="legacy")
+        legacy_agg = xbudget.aggregate(legacy_preset, decompose=decompose)
+
+    new_grid = build_grid()
+    new_preset = copy.deepcopy(preset)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        xbudget.collect_budgets(new_grid, new_preset)
+    new_agg = xbudget.BudgetQuery(new_grid, new_preset).aggregate(decompose=decompose)
+
+    assert set(legacy_agg) == set(new_agg)
+    compared = 0
+    for budget in new_agg:
+        for side in ("lhs", "rhs"):
+            if side not in new_agg[budget]:
+                continue
+            legacy_side, new_side = legacy_agg[budget][side], new_agg[budget][side]
+            assert set(legacy_side) == set(new_side), (
+                f"{budget}/{side}: labels {sorted(new_side)} != "
+                f"legacy {sorted(legacy_side)}"
+            )
+            for label, new_name in new_side.items():
+                a = np.asarray(new_grid._ds[new_name].values, dtype="float64")
+                b = np.asarray(
+                    legacy_grid._ds[legacy_side[label]].values, dtype="float64"
+                )
+                assert np.allclose(
+                    np.nan_to_num(a), np.nan_to_num(b), rtol=RTOL, atol=0.0
+                ), f"{budget}/{side}/{label} differs from legacy"
+                compared += 1
+    assert compared, "no terms compared"
+    return new_agg
+
+
+@pytest.mark.skipif(
+    not os.path.exists(DATA_PATH),
+    reason="example MOM6 dataset not present (download from Zenodo to run)",
+)
+def test_aggregate_matches_legacy_on_mom6_example():
+    """Using the decompose list the MOM6 example notebook actually passes."""
+    agg = _assert_aggregate_equivalent(
+        _build_mom6_grid,
+        xbudget.load_preset_budget("MOM6"),
+        decompose=["surface_exchange_flux", "nonadvective", "diffusion"],
+    )
+    # decompose flattens a term into its parts, keyed parent_child
+    assert "surface_exchange_flux_snow" in agg["mass"]["rhs"]
+    assert "surface_exchange_flux" not in agg["mass"]["rhs"]
+
+
+@pytest.mark.skipif(
+    not os.path.exists(ECCO_DATA_PATH),
+    reason="example ECCO LLC90 dataset not present (download from Zenodo to run)",
+)
+def test_aggregate_matches_legacy_on_ecco_native_example():
+    """Using the decompose list the ECCO decomposition notebook actually passes."""
+    _assert_aggregate_equivalent(
+        _build_ecco_grid,
+        xbudget.load_preset_budget("ECCOV4r4_native"),
+        decompose=["advection", "diffusion", "surface_exchange_flux"],
+    )

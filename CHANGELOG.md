@@ -11,16 +11,39 @@ the ECCOv4r4 LLC90 grid (140 → 75 variables, 0 mismatches).
 
 ### Quick migration
 
-Add `name_scheme="legacy"` to your `collect_budgets` call to keep the previous
-behavior exactly — historical variable names *and* the in-place filling of the
-recipe dict that `get_vars`/`aggregate` depend on:
+Variable names changed, and the helpers that looked them up are replaced by
+`BudgetQuery`:
+
+```python
+xbudget.collect_budgets(grid, xbudget_dict)          # unchanged call
+q = xbudget.BudgetQuery(grid, xbudget_dict)          # new
+
+q.var("heat_lhs_advection")            # was: get_vars(d, "heat_lhs_sum_advection")["var"]
+q.get_vars("heat_lhs_advection")       # was: get_vars(d, "heat_lhs_sum_advection_sum")
+q.aggregate()                          # was: xbudget.aggregate(d)
+q.aggregate(decompose=["diffusion"])   # was: xbudget.aggregate(d, decompose=["diffusion"])
+```
+
+| Deprecated (removed in v1.0) | Replacement |
+|---|---|
+| `get_vars(d, term)["var"]` | `q.var(term)` |
+| `get_vars(d, term)` | `q.get_vars(term)` |
+| `aggregate(d, decompose=...)` | `q.aggregate(decompose=...)` |
+| `disaggregate`, `deep_search` | `q.aggregate` / `q.get_vars` |
+| `collect_budgets(..., name_scheme="legacy")` | the default `name_scheme="v1"` |
+| `budget_fill_dict` | `collect_budgets` |
+
+If you need the old behavior *right now*, `name_scheme="legacy"` still
+reproduces it exactly — historical variable names *and* the in-place filling of
+the recipe dict that `get_vars`/`aggregate` depend on:
 
 ```python
 xbudget.collect_budgets(grid, xbudget_dict, name_scheme="legacy")
 ```
 
-Everything downstream (old variable names, `get_vars`, `aggregate`) then works
-unchanged. Adopt the new scheme at your own pace.
+It now emits a `FutureWarning`: both the `"legacy"` value and the `name_scheme`
+argument itself are going away in v1.0, along with the helpers above. Adopt the
+new scheme at your own pace, but do adopt it.
 
 ### Breaking changes
 
@@ -46,9 +69,11 @@ unchanged. Adopt the new scheme at your own pace.
    previously filled each node's `var` field in place; it now leaves
    `xbudget_dict` untouched and returns the data object. Because the legacy
    `get_vars`/`aggregate` helpers read those filled `var` fields, they only work
-   after a `name_scheme="legacy"` run (which still fills the dict). To query the
-   `v1` output, use the `records`/`alias_map` returned by `evaluate_budgets`
-   (below) and the `provenance` / `xbudget_path` attributes on each variable.
+   after a `name_scheme="legacy"` run (which still fills the dict). Use
+   `BudgetQuery` (below) to query the `v1` output.
+
+   A welcome side effect: a recipe now round-trips through `save_yaml`/`load_yaml`
+   unchanged, because running the engine no longer rewrites it.
 
 3. **`collect_budgets` signature** gained a `name_scheme` keyword and its first
    parameter is named `data` (a grid or dataset), matching its long-standing
@@ -56,6 +81,20 @@ unchanged. Adopt the new scheme at your own pace.
 
 ### New
 
+- **`xbudget.BudgetQuery(data, xbudget_dict)`** — the v1 way to find what a run
+  produced: `.var(term)`, `.get_vars(term)`, `.aggregate(decompose=...)`,
+  `.terms()`, `.alias_map`. It is built from the data and the recipe rather than
+  from a live engine run, so it also works on a dataset reopened from disk, and
+  it resolves a legacy-filled recipe correctly too.
+
+  Terms are addressed by their v1 name (`"heat_rhs_diffusion"`), their path
+  (`("heat", "rhs", "diffusion")`), or a raw diagnostic name (which reports the
+  terms that reference it). A legacy operator-infixed name raises a `KeyError`
+  naming its v1 equivalent, rather than silently missing.
+- **`xbudget.save_yaml(xbudget_dict, filepath)`** — write a convention to YAML.
+  It validates first (so a malformed recipe cannot reach disk) and preserves key
+  order (which is meaningful: it drives operand order). `load_yaml` now re-raises
+  YAML errors instead of failing with an unrelated `UnboundLocalError`.
 - `xbudget.parse_budgets(xbudget_dict)` → typed tree (`xbudget.nodes.Budget`),
   the single schema-validating entry point; raises `xbudget.BudgetParseError`
   with the offending path on malformed conventions.
@@ -72,8 +111,10 @@ unchanged. Adopt the new scheme at your own pace.
   `eccov4r4_heat_budget_decomposition`).
 - **`lateral_divergence` now uses native xgcm** (`grid.diff` with
   `other_component` + `face_connections`) instead of a hand-rolled LLC90 flux
-  stitcher; verified bit-for-bit identical on the ECCO grid. The
-  `xbudget/llc90` module is removed.
+  stitcher, so it is correct on any face-connected topology xgcm supports rather
+  than LLC90 specifically. Verified bit-identical (zero differing elements) to
+  the old stitcher under xgcm 0.10.0, on the full 13-tile ECCO grid, for both the
+  Eulerian and bolus mass-flux pairs. The `xbudget/llc90` module is removed.
 
 ### Fixed
 
@@ -93,16 +134,60 @@ unchanged. Adopt the new scheme at your own pace.
 
 ### Deprecated
 
-- `budget_fill_dict` is retained as the legacy reference engine (still used
-  internally by `name_scheme="legacy"`) but is superseded by `collect_budgets`
-  / `evaluate_budgets`.
+All of the following emit a `FutureWarning` and are **removed in v1.0**. See the
+migration table at the top.
+
+- **`name_scheme="legacy"`**, and the `name_scheme` argument itself — v1 naming
+  becomes the only behavior.
+- **`get_vars`, `aggregate`, `disaggregate`, `deep_search`** — they read the
+  `var` fields that only a legacy run fills, so they cannot serve the default
+  engine. Replaced by `BudgetQuery`. They are left behaving exactly as before
+  (rather than re-pointed at v1) on purpose: a legacy-filled recipe is
+  indistinguishable from a clean one, so re-pointing them would have returned v1
+  names for a dataset holding legacy names — a silent wrong answer instead of a
+  loud rename.
+- **`budget_fill_dict`** — the legacy reference engine, still used internally by
+  `name_scheme="legacy"` and as the equivalence-test oracle; superseded by
+  `collect_budgets` / `evaluate_budgets`.
+
+`BudgetQuery.aggregate` is a faithful replacement for `aggregate`, with six
+deliberate differences:
+
+1. A leaf term reports its path name (`heat_rhs_advection`) rather than the raw
+   diagnostic (`advective_tendency`). Same array — but now one carrying
+   `xbudget_path`/`provenance` attributes.
+2. Values have no `_sum`/`_product` infixes (the v1 naming change).
+3. Terms that were not materialized (a missing diagnostic) are dropped. Legacy
+   kept unmaterialized *leaves*, so `grid._ds[v]` would then raise `KeyError`.
+4. `decompose` matches term names exactly. Legacy tested `k not in decompose`
+   against a bare string, so `decompose="advection"` also matched a term named
+   `"adv"`.
+5. Decomposing a leaf no longer emits a spurious `"<name>_var"` key.
+6. A side with no `sum` returns `{term: var}` rather than a shredded node dict.
+
+`BudgetQuery.get_vars` likewise reports only operands that were actually used:
+an absent diagnostic is omitted from a `sum`'s operand list (it simply drops
+out), but appears as `0.0` in a `product`'s — mirroring the evaluator, which
+multiplies the missing factor in as zero. The legacy `get_vars` listed the
+recipe verbatim, so it could name variables that were never in the dataset.
+
+### Removed
+
+- The `xbudget/llc90` module (`diff_2d_flux_llc90`), the hand-rolled LLC90 flux
+  stitcher. `lateral_divergence` now uses native xgcm for any face-connected
+  grid; the two were verified bit-identical on the ECCO grid before it went.
 
 ### Dependencies
 
-- The LLC `lateral_divergence` relies on native face-connected differencing in
-  `xgcm` (`grid.diff` with `other_component`). This is only available in xgcm
-  **after 0.9.0** (currently from the development `main` branch); the
-  `requires-python`/`xgcm` pins should be tightened once a release ships it.
+- **xgcm >= 0.10.0 is now required** (was >= 0.9.0). The LLC `lateral_divergence`
+  relies on native face-connected differencing (`grid.diff` with
+  `other_component`), which 0.10.0 is the first release to ship correctly.
+- xgcm 0.10.0 removed the `periodic` argument to `xgcm.Grid` and renamed
+  `boundary` to `padding`. This does not affect the xbudget API, but it does
+  affect **your** grid construction: replace `boundary=` with `padding=`, and
+  `periodic=False` with `padding="fill"` (`periodic=True` with
+  `padding="periodic"`). The example grid loaders in `examples/` show the new
+  form.
 
 ### Parser tolerance
 

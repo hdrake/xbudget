@@ -18,6 +18,10 @@ from xbudget.collect import (
 )
 
 
+# These four classes test the *legacy* recipe-reading helpers on purpose,
+# so their deprecation warning is expected here rather than informative.
+# TestLegacyHelperDeprecation below is what pins the warning itself.
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 class TestDisaggregate:
     """Test the disaggregate function"""
 
@@ -77,6 +81,7 @@ class TestDisaggregate:
         assert "diffusion" not in result
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 class TestDeepSearch:
     """Test the deep_search and _deep_search functions"""
 
@@ -124,6 +129,7 @@ class TestDeepSearch:
         }
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 class TestAggregate:
     """Test the aggregate function"""
 
@@ -209,6 +215,7 @@ class TestAggregate:
         assert "advection" in result["heat"]["rhs"]
 
 
+@pytest.mark.filterwarnings("ignore::FutureWarning")
 class TestGetVars:
     """Test the get_vars and _get_vars functions"""
 
@@ -318,7 +325,8 @@ class TestCollectBudgets:
         xbudget_dict = {
             "heat": {"rhs": {"sum": {"forcing": {"var": "forcing_diag"}, "var": None}, "var": None}}
         }
-        collect_budgets(ds, xbudget_dict, name_scheme="legacy")
+        with pytest.warns(FutureWarning, match="name_scheme"):
+            collect_budgets(ds, xbudget_dict, name_scheme="legacy")
         # Historical variable names are produced...
         assert "heat_rhs_sum_forcing" in ds
         assert "heat_rhs_sum" in ds
@@ -476,7 +484,7 @@ class TestBudgetFillDict:
 
         grid_params = {
             "coords": {"X": {"center": "x_c", "left": "x_g"}},
-            "periodic": False,
+            "padding": "fill",
             "autoparse_metadata": False,
         }
 
@@ -554,7 +562,7 @@ class TestBudgetFillDict:
         grid = xgcm.Grid(
             ds,
             coords={"X": {"center": "x_c", "left": "x_g"}},
-            periodic=False,
+            padding="fill",
             autoparse_metadata=False,
         )
         # A node with a `product` (evaluated first, sets the running variable)
@@ -569,3 +577,57 @@ class TestBudgetFillDict:
 
         assert "tendency_rhs_product" in grid._ds
         assert "tendency_rhs_difference" in grid._ds
+
+
+class TestLegacyHelperDeprecation:
+    """The recipe-reading query helpers warn, exactly once, and still work.
+
+    "Exactly once" is the point: `disaggregate` recurses and `aggregate` calls
+    it, so a warning in the recursive body would fire once per node and train
+    users to filter it.
+    """
+
+    BUDGET = {
+        "heat": {
+            "rhs": {
+                "sum": {
+                    "advection": {"var": "advective_tendency"},
+                    "var": "heat_rhs_sum",
+                },
+                "var": "heat_rhs",
+            }
+        }
+    }
+
+    def test_aggregate_warns_once(self):
+        with pytest.warns(FutureWarning, match="BudgetQuery") as record:
+            result = aggregate(copy.deepcopy(self.BUDGET))
+        assert len(record) == 1
+        assert result["heat"]["rhs"] == {"advection": "advective_tendency"}
+
+    def test_aggregate_with_decompose_warns_once(self):
+        """The recursive path must not multiply the warning."""
+        budget = copy.deepcopy(self.BUDGET)
+        budget["heat"]["rhs"]["sum"]["advection"]["sum"] = {
+            "horizontal": {"var": "adv_h"},
+            "vertical": {"var": "adv_v"},
+            "var": "heat_rhs_sum_advection_sum",
+        }
+        with pytest.warns(FutureWarning) as record:
+            aggregate(budget, decompose="advection")
+        assert len(record) == 1
+
+    def test_disaggregate_warns_once(self):
+        with pytest.warns(FutureWarning, match="BudgetQuery") as record:
+            disaggregate(copy.deepcopy(self.BUDGET)["heat"]["rhs"])
+        assert len(record) == 1
+
+    def test_deep_search_warns_once(self):
+        with pytest.warns(FutureWarning, match="BudgetQuery") as record:
+            deep_search({"advection": "advective_tendency"})
+        assert len(record) == 1
+
+    def test_get_vars_warns_once(self):
+        with pytest.warns(FutureWarning, match="BudgetQuery") as record:
+            get_vars(copy.deepcopy(self.BUDGET), "heat_rhs")
+        assert len(record) == 1

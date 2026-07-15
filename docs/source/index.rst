@@ -15,11 +15,15 @@ xbudget ingests an `xgcm.Grid` object containing the budget diagnostics and uses
 
 While drafting a `.yaml` file from scratch for a new model can be daunting, it only needs to be done once -- then closing budgets is a breeze!
 
+New here? The :doc:`quickstart` closes a budget in about thirty lines, with made-up data and no downloads. :doc:`conventions` is the reference for writing a `.yaml` file for your own model.
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    installation
+   quickstart
+   conventions
    examples/MOM6_budget_examples_mass_heat_salt
    examples/eccov4r4_budget_examples_mass_heat_salt
    examples/eccov4r4_heat_budget_decomposition

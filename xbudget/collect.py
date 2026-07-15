@@ -20,6 +20,23 @@ __all__ = [
     "lateral_divergence",
 ]
 
+def _warn_legacy_helper(name):
+    """Warn that a recipe-reading query helper is on its way out.
+
+    ``FutureWarning`` rather than ``DeprecationWarning``: the latter is hidden
+    unless the call is in ``__main__``, so a user calling xbudget from their own
+    analysis module — most of them — would never see it.
+    """
+    warnings.warn(
+        f"xbudget.{name}() is deprecated and will be removed in xbudget v1.0. "
+        f"It reads the `var` fields that only a (deprecated) "
+        f"name_scheme='legacy' run fills into `xbudget_dict`. Use "
+        f"xbudget.BudgetQuery(data, xbudget_dict) instead, which queries the "
+        f"default v1 output; see CHANGELOG.md for the equivalents.",
+        FutureWarning,
+        stacklevel=3,
+    )
+
 def _warn_missing_variable(name):
     """Warn that a requested variable is absent from the dataset and skipped."""
     warnings.warn(
@@ -49,12 +66,15 @@ def lateral_divergence(grid, Fx, Fy):
 def aggregate(xbudget_dict, decompose=[]):
     """Aggregate xbudget dictionary into simpler root-level budgets.
 
-    .. note::
-        This reads the ``var`` fields that the engine fills in, so it only
-        returns meaningful results after a legacy run, i.e.
-        ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. The
-        default ``name_scheme="v1"`` does not mutate the recipe; query its output
-        via the ``records``/``alias_map`` from ``evaluate_budgets`` instead.
+    .. deprecated:: 0.7.0
+        Removed in v1.0. This reads the ``var`` fields that the engine fills in,
+        so it only returns meaningful results after a (also deprecated) legacy
+        run, i.e. ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``.
+        Use :meth:`xbudget.BudgetQuery.aggregate` instead, which queries the
+        default ``name_scheme="v1"`` output::
+
+            q = xbudget.BudgetQuery(grid, xbudget_dict)
+            q.aggregate(decompose=["diffusion"])
 
     Parameters
     ----------
@@ -113,12 +133,13 @@ def aggregate(xbudget_dict, decompose=[]):
     --------
     disaggregate, deep_search, _deep_search
     """
+    _warn_legacy_helper("aggregate")
     new_budgets = copy.deepcopy(xbudget_dict)
     for tr, tr_xbudget_dict in xbudget_dict.items():
         for side,terms in tr_xbudget_dict.items():
             if side in ["lhs", "rhs"]:
-                new_budgets[tr][side] = deep_search(
-                    disaggregate(tr_xbudget_dict[side], decompose=decompose)
+                new_budgets[tr][side] = _deep_search(
+                    _disaggregate(tr_xbudget_dict[side], decompose=decompose)
                 )
     return new_budgets
 
@@ -162,6 +183,11 @@ def disaggregate(b, decompose=[]):
     --------
     aggregate
     """
+    _warn_legacy_helper("disaggregate")
+    return _disaggregate(b, decompose=decompose)
+
+def _disaggregate(b, decompose=[]):
+    """Recursive body of :func:`disaggregate` (warning-free, so it fires once)."""
     if "sum" in b:
         bsum_novar = {k:v for (k,v) in b["sum"].items() if (k!="var") and (v is not None)}
         sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
@@ -170,7 +196,7 @@ def disaggregate(b, decompose=[]):
             if k not in decompose:
                 b_recurse[k] = v
             else:
-                v_dict = disaggregate(b["sum"][k], decompose=decompose)
+                v_dict = _disaggregate(b["sum"][k], decompose=decompose)
                 if "product" in v_dict.keys():
                     b_recurse[k] = v_dict["var"]
                 else:
@@ -180,11 +206,12 @@ def disaggregate(b, decompose=[]):
 
 def deep_search(b):
     """Utility function for searching for variables in xbudget dictionary.
-    
+
     See also
     --------
     aggregate, _deep_search
     """
+    _warn_legacy_helper("deep_search")
     return _deep_search(b, new_b=None, k_last=None)
 
 def _deep_search(b, new_b=None, k_last=None):
@@ -241,6 +268,17 @@ def collect_budgets(data, xbudget_dict, allow_rechunk=True, name_scheme="v1"):
         The same object passed in, for convenience.
     """
     if name_scheme == "legacy":
+        warnings.warn(
+            "name_scheme='legacy' is deprecated and will be removed in xbudget "
+            "v1.0, along with the `name_scheme` argument itself (v1 naming will "
+            "be the only behavior). Legacy mode also mutates `xbudget_dict` in "
+            "place. Migrate to the default name_scheme='v1' and query the result "
+            "with xbudget.BudgetQuery(data, xbudget_dict) instead of "
+            "get_vars()/aggregate(); see CHANGELOG.md for the legacy->v1 name "
+            "mapping.",
+            FutureWarning,
+            stacklevel=2,
+        )
         # Faithful legacy behavior: reuse the reference engine, which emits the
         # historical names and fills the recipe dict in place so that the
         # dict-based query helpers (get_vars/aggregate) keep working.
@@ -446,8 +484,13 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
                 # Temporarily rechunk to put the difference dim in a single chunk, all other chunks are auto.
                 temporary_chunks = {axis_dim: -1, **{d: "auto" for d in source.dims if d != axis_dim}}
                 var = grid.diff(source.chunk(temporary_chunks).fillna(0.0), axis=axis)
-                # Attempt original chunking for preserved dimensions
-                var = var.chunk({d: original_chunks.get(d, var.chunksizes[d]) for d in var.dims})
+                # Restore the original chunking of the dimensions we know; leave
+                # any others as `grid.diff` produced them. Only naming the dims we
+                # want changed avoids reading `var.chunksizes`, which raises when
+                # the result's coords are chunked differently from its data.
+                restore = {d: original_chunks[d] for d in var.dims if d in original_chunks}
+                if restore:
+                    var = var.chunk(restore)
             else:
                 var = grid.diff(source.fillna(0.), axis)
 
@@ -466,12 +509,15 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
 def get_vars(xbudget_dict, terms):
     """Get xbudget sub-dictionaries for specified terms.
 
-    .. note::
-        Reads the ``var`` fields filled in by a legacy run, i.e.
-        ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. For the
-        default ``name_scheme="v1"`` engine, query the ``records``/``alias_map``
-        from :func:`xbudget.evaluate.evaluate_budgets` and the
-        ``provenance``/``xbudget_path`` variable attributes instead.
+    .. deprecated:: 0.7.0
+        Removed in v1.0. Reads the ``var`` fields filled in by a (also
+        deprecated) legacy run, i.e.
+        ``collect_budgets(data, xbudget_dict, name_scheme="legacy")``. Use
+        :meth:`xbudget.BudgetQuery.get_vars` / :meth:`xbudget.BudgetQuery.var`
+        instead, which query the default ``name_scheme="v1"`` output::
+
+            q = xbudget.BudgetQuery(grid, xbudget_dict)
+            q.var("heat_rhs_diffusion")
 
     Parameters
     ----------
@@ -496,6 +542,7 @@ def get_vars(xbudget_dict, terms):
     >>> xbudget.get_vars(xbudget_dict, "heat_rhs_sum")
     {'var': 'heat_rhs_sum', 'sum': ['advective_tendency']}
     """
+    _warn_legacy_helper("get_vars")
     return _get_vars(xbudget_dict, terms)
 
 def _get_vars(b, terms, k_long=""):
