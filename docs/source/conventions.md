@@ -29,28 +29,30 @@ A minimal budget, in YAML:
 ```yaml
 heat:
   lhs:
-    var: null
     sum:
-      var: null
       tendency: {var: "opottemptend"}
   rhs:
-    var: null
     sum:
-      var: null
       surface_forcing:
-        var: null
         product:
-          var: null
           flux_per_unit_area: "hfds"
           area: "areacello"
 ```
 
 Three things are going on:
 
-**`var: null` means "xbudget fills this in".** It marks a quantity that gets
-derived. When the value is a *string* instead, as in `tendency: {var:
-"opottemptend"}`, it is a leaf: it points straight at a diagnostic in your
-dataset.
+**`var` names a diagnostic — and you only write it when you have one to name.**
+`tendency: {var: "opottemptend"}` is a leaf: it points straight at a variable in
+your dataset. Everything else is *derived*, and you say nothing at all — the
+absence of `var` is what marks a quantity xbudget computes for you.
+
+```{note}
+You may see `var: null` scattered through older conventions (and through
+xbudget's own, before v0.7.0). It was never required: the parser reads a missing
+`var` and an explicit `var: null` as the same thing. If you have such a
+convention it keeps working untouched — but new ones can leave the placeholders
+out, which is roughly a third fewer lines.
+```
 
 **Operands are named.** The keys under a `sum` or `product` (`flux_per_unit_area`,
 `area`) are labels you choose. They are not looked up anywhere — they name the
@@ -62,9 +64,7 @@ as a scalar, which is how conventions flip a sign or convert units:
 
 ```yaml
 lateral:
-  var: null
   product:
-    var: null
     sign: -1.
     tracer_content_tendency_per_unit_area: "T_advection_xy"
     area: "areacello"
@@ -100,9 +100,7 @@ do not name it:
 
 ```yaml
 zonal_divergence:
-  var: null
   difference:
-    var: null
     zonal_mass_transport: "umo"
 ```
 
@@ -113,8 +111,7 @@ which case it is evaluated first and then differenced.
 
 ```yaml
 dt_inv:
-  var: null
-  reciprocal: {var: null, dt: {var: "dt"}}
+  reciprocal: {dt: {var: "dt"}}
 ```
 
 **`lateral_divergence`** takes two flux sub-terms and forms their horizontal
@@ -122,15 +119,11 @@ divergence:
 
 ```yaml
 volume_flux_divergence:
-  var: null
   lateral_divergence:
-    var: null
     Fx:
-      var: null
-      product: {var: null, u_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
+      product: {u_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
     Fy:
-      var: null
-      product: {var: null, v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+      product: {v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
 ```
 
 `difference` and `lateral_divergence` are discretization-aware, so they need an
@@ -193,15 +186,12 @@ against real data, then write it out:
 ```python
 xbudget_dict = {
     "heat": {
-        "lhs": {"var": None, "sum": {"var": None, "tendency": {"var": "heat_tendency"}}},
+        "lhs": {"sum": {"tendency": {"var": "heat_tendency"}}},
         "rhs": {
-            "var": None,
             "sum": {
-                "var": None,
                 "advection": {"var": "advective_flux_convergence"},
                 "surface_forcing": {
-                    "var": None,
-                    "product": {"var": None, "flux": "surface_heat_flux", "area": "cell_area"},
+                    "product": {"flux": "surface_heat_flux", "area": "cell_area"},
                 },
             },
         },
@@ -216,21 +206,15 @@ which writes:
 ```yaml
 heat:
   lhs:
-    var: null
     sum:
-      var: null
       tendency:
         var: heat_tendency
   rhs:
-    var: null
     sum:
-      var: null
       advection:
         var: advective_flux_convergence
       surface_forcing:
-        var: null
         product:
-          var: null
           flux: surface_heat_flux
           area: cell_area
 ```

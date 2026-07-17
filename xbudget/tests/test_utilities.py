@@ -631,3 +631,67 @@ class TestLegacyHelperDeprecation:
         with pytest.warns(FutureWarning, match="BudgetQuery") as record:
             get_vars(copy.deepcopy(self.BUDGET), "heat_rhs")
         assert len(record) == 1
+
+
+class TestUnfilledRecipeIsLoud:
+    """Querying a recipe the legacy engine never filled must not return {}.
+
+    This is the shape of the downstream breakage in xwmt/xwmb: they call
+    collect_budgets (now v1 by default, which does not touch the recipe) and
+    then the legacy aggregate, which silently found nothing.
+    """
+
+    RECIPE = {
+        "heat": {
+            "rhs": {
+                "var": None,
+                "sum": {
+                    "var": None,
+                    "forcing": {
+                        "var": None,
+                        "product": {"var": None, "flux": "f", "area": "a"},
+                    },
+                },
+            }
+        }
+    }
+
+    def _ds(self):
+        return xr.Dataset(
+            {"f": (("x",), np.ones(3)), "a": (("x",), np.full(3, 2.0))},
+            coords={"x": [0, 1, 2]},
+        )
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    def test_aggregate_after_v1_run_raises(self):
+        """The xwmt pattern: collect with v1, then call the legacy aggregate."""
+        d = copy.deepcopy(self.RECIPE)
+        collect_budgets(self._ds(), d)  # v1 default: recipe untouched
+        with pytest.raises(ValueError, match="BudgetQuery"):
+            aggregate(d)
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    def test_aggregate_on_uncollected_recipe_raises(self):
+        with pytest.raises(ValueError, match="nothing to report"):
+            aggregate(copy.deepcopy(self.RECIPE))
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    def test_aggregate_after_legacy_run_still_works(self):
+        d = copy.deepcopy(self.RECIPE)
+        collect_budgets(self._ds(), d, name_scheme="legacy")
+        assert aggregate(d)["heat"]["rhs"] == {"forcing": "heat_rhs_sum_forcing"}
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    def test_get_vars_miss_on_unfilled_recipe_explains(self):
+        with pytest.raises(ValueError, match="BudgetQuery"):
+            get_vars(copy.deepcopy(self.RECIPE), "heat_rhs_sum_forcing")
+
+    @pytest.mark.filterwarnings("ignore::FutureWarning")
+    def test_recipe_with_no_derived_terms_is_not_unfilled(self):
+        """A skeleton convention (all placeholders, no operations) is not an error.
+
+        MOM6_drift is shaped like this: there is nothing to fill, so there is
+        nothing to complain about.
+        """
+        skeleton = {"heat": {"rhs": {"sum": {"advection": {"var": None}}}}}
+        assert aggregate(skeleton)["heat"]["rhs"] == {}

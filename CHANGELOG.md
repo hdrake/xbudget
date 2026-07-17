@@ -81,6 +81,28 @@ new scheme at your own pace, but do adopt it.
 
 ### New
 
+- **`var: null` placeholders are no longer needed.** Write `var` only when you
+  are naming a diagnostic (`var: "thetao"`); a derived term says nothing at all.
+  This was always true of the parser — a missing `var` and an explicit
+  `var: null` have always read the same — but every shipped convention was
+  written the verbose way, so it read as mandatory. The placeholders are now
+  gone from all five shipped conventions (412 lines; `MOM6.yaml` 352 → 244),
+  with the parse trees verified byte-identical before and after.
+
+  ```yaml
+  # before                      # now
+  forcing:                      forcing:
+    var: null                     product:
+    product:                        flux: "hfds"
+      var: null                     area: "areacello"
+      flux: "hfds"
+      area: "areacello"
+  ```
+
+  Existing conventions keep working untouched — this removes a requirement, it
+  does not add one. The one place the placeholders are still meaningful is a
+  term that declares a name but no operations (the `MOM6_drift` skeleton), where
+  `var: null` is what makes the node a node.
 - **`xbudget.BudgetQuery(data, xbudget_dict)`** — the v1 way to find what a run
   produced: `.var(term)`, `.get_vars(term)`, `.aggregate(decompose=...)`,
   `.terms()`, `.alias_map`. It is built from the data and the recipe rather than
@@ -125,6 +147,18 @@ new scheme at your own pace, but do adopt it.
   (`UVELSTAR`/`VVELSTAR`) contributed nothing to the mass budget. The wrapper is
   now restored, so the bolus convergence is materialized and included. **This
   changes ECCO mass-budget results** (the bolus term is no longer zero).
+- **`aggregate`/`get_vars` no longer return a silently empty answer** when the
+  recipe was never filled in. `collect_budgets(grid, d)` followed by
+  `aggregate(d)` — the default `v1` engine plus the legacy helper — used to hand
+  back `{}` for every derived term, with nothing to indicate why. It now raises
+  a `ValueError` naming `BudgetQuery`. (A convention with nothing to fill, like
+  the `MOM6_drift` skeleton, is unaffected.) **If you use xbudget from xwmt or
+  xwmb, this is the error you will hit** — see the migration table above.
+- The legacy engine no longer requires `var` keys to be present: it reads them
+  with `.get` and adds them as it fills, so it works on placeholder-free
+  conventions too. (This also fixes a latent "dictionary changed size during
+  iteration" and a `KeyError` in `disaggregate`, both of which only stayed
+  hidden because `var: null` was always there to be read.)
 - The `difference` operation's grid guard was misattached, so a `difference`
   on a plain `Dataset` raised an opaque `NameError`, and a `difference` term
   evaluated after another operation in the same node raised spuriously even

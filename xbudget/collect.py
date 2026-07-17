@@ -8,6 +8,8 @@ import xgcm
 
 import warnings
 
+from .nodes import OPERATION_KEYS
+
 __all__ = [
     "aggregate",
     "disaggregate",
@@ -36,6 +38,70 @@ def _warn_legacy_helper(name):
         FutureWarning,
         stacklevel=3,
     )
+
+def _is_unfilled_recipe(xbudget_dict):
+    """True if the recipe has derived terms but none was ever filled in.
+
+    The legacy engine records each derived term's variable name in its ``var``
+    field as it goes. If every derived term's ``var`` is still empty, the recipe
+    has not been through that engine: either it was never collected, or it was
+    collected with the default ``name_scheme="v1"``, which deliberately leaves
+    the recipe alone. The dict-reading helpers then have nothing to report and
+    would hand back a silently empty answer.
+
+    Only terms that *could* have been filled count. A skeleton convention like
+    ``MOM6_drift`` — whose terms are declared but reference no diagnostics — has
+    nothing to materialize, so a legacy run legitimately leaves it empty and
+    this returns False. Otherwise the check could not tell "never ran the legacy
+    engine" from "ran it, but every term was skipped".
+    """
+    fillable, filled = 0, 0
+
+    def references_a_diagnostic(node):
+        """Does this subtree name any dataset variable to build from?"""
+        if isinstance(node, str):
+            return True
+        if isinstance(node, dict):
+            return any(references_a_diagnostic(v) for v in node.values())
+        return False
+
+    def walk(node):
+        nonlocal fillable, filled
+        if not isinstance(node, dict):
+            return
+        ops = {k: v for k, v in node.items() if k in OPERATION_KEYS}
+        if ops and any(references_a_diagnostic(v) for v in ops.values()):
+            fillable += 1
+            if node.get("var") is not None:
+                filled += 1
+        for k, v in node.items():
+            if k != "var":
+                walk(v)
+
+    for budget in xbudget_dict.values():
+        if isinstance(budget, dict):
+            for side in ("lhs", "rhs"):
+                walk(budget.get(side))
+    return fillable > 0 and filled == 0
+
+
+def _require_filled_recipe(xbudget_dict, func):
+    """Fail loudly rather than return a silently empty result."""
+    if not _is_unfilled_recipe(xbudget_dict):
+        return
+    raise ValueError(
+        f"xbudget.{func}() found no filled-in terms in `xbudget_dict`, so it "
+        f"has nothing to report. It reads the `var` fields that only the "
+        f"deprecated `collect_budgets(..., name_scheme='legacy')` writes into "
+        f"the recipe; the default `name_scheme='v1'` leaves the recipe "
+        f"untouched (and you may not have called collect_budgets at all). "
+        f"Query the v1 output instead:\n\n"
+        f"    xbudget.collect_budgets(data, xbudget_dict)\n"
+        f"    q = xbudget.BudgetQuery(data, xbudget_dict)\n"
+        f"    q.aggregate()          # or q.var(...) / q.get_vars(...)\n\n"
+        f"See CHANGELOG.md for the full migration."
+    )
+
 
 def _warn_missing_variable(name):
     """Warn that a requested variable is absent from the dataset and skipped."""
@@ -134,6 +200,7 @@ def aggregate(xbudget_dict, decompose=[]):
     disaggregate, deep_search, _deep_search
     """
     _warn_legacy_helper("aggregate")
+    _require_filled_recipe(xbudget_dict, "aggregate")
     new_budgets = copy.deepcopy(xbudget_dict)
     for tr, tr_xbudget_dict in xbudget_dict.items():
         for side,terms in tr_xbudget_dict.items():
@@ -190,7 +257,15 @@ def _disaggregate(b, decompose=[]):
     """Recursive body of :func:`disaggregate` (warning-free, so it fires once)."""
     if "sum" in b:
         bsum_novar = {k:v for (k,v) in b["sum"].items() if (k!="var") and (v is not None)}
-        sum_dict = dict((k,v["var"]) if ("var" in v) else (k,v) for k,v in bsum_novar.items())
+        # A term node reports its `var`, absent or null alike (both mean "the
+        # engine did not fill this in"); a bare constant/variable operand
+        # reports itself. Reading it with .get keeps `var: null` optional --
+        # subscripting would KeyError, and testing `"var" in v` would fall
+        # through and hand the whole node dict back to the caller.
+        sum_dict = dict(
+            (k, v.get("var")) if isinstance(v, dict) else (k, v)
+            for k, v in bsum_novar.items()
+        )
         b_recurse = {}
         for (k,v) in sum_dict.items():
             if k not in decompose:
@@ -198,7 +273,7 @@ def _disaggregate(b, decompose=[]):
             else:
                 v_dict = _disaggregate(b["sum"][k], decompose=decompose)
                 if "product" in v_dict.keys():
-                    b_recurse[k] = v_dict["var"]
+                    b_recurse[k] = v_dict.get("var")
                 else:
                     b_recurse[k] = v_dict
         return b_recurse
@@ -330,15 +405,22 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
     
     var_pref = None
 
-    if ((xbudget_dict["var"] is not None) and
-        (xbudget_dict["var"] in ds)       and
+    # `var` is optional: an absent key means the same as `var: null` (a value
+    # this engine fills in), so read it with .get rather than subscripting.
+    explicit_var = xbudget_dict.get("var")
+
+    if ((explicit_var is not None) and
+        (explicit_var in ds)       and
         (namepath not in ds)):
-        var_rename = ds[xbudget_dict["var"]].rename(namepath)
-        var_rename.attrs['provenance'] = xbudget_dict["var"]
-        ds[namepath] = ds[xbudget_dict["var"]]
+        var_rename = ds[explicit_var].rename(namepath)
+        var_rename.attrs['provenance'] = explicit_var
+        ds[namepath] = ds[explicit_var]
         var_pref = ds[namepath]
 
-    for k,v in xbudget_dict.items():
+    # Snapshot the items: this loop fills `var` into the recipe as it goes, and
+    # with `var` optional that can *add* a key rather than overwrite one, which
+    # would otherwise raise "dictionary changed size during iteration".
+    for k,v in list(xbudget_dict.items()):
         if k in ['sum', 'product']:
             op_list = []
             for k_term, v_term in v.items():
@@ -376,10 +458,10 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             var_provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
             var.attrs["provenance"] = var_provenance
             ds[var_name] = var
-            if (xbudget_dict[k]["var"] is None):
+            if (xbudget_dict[k].get("var") is None):
                 xbudget_dict[k]["var"] = var_name
 
-            if (xbudget_dict["var"] is None):
+            if (xbudget_dict.get("var") is None):
                 var_copy = var.copy()
                 var_copy.attrs["provenance"] = var_name
                 xbudget_dict["var"] = namepath
@@ -392,20 +474,23 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
         
         if k == "reciprocal":
             v_term = [v_term for k_term, v_term in v.items() if k_term != "var"][0]
-            if v_term['var'] not in ds:
-                _warn_missing_variable(v_term['var'])
+            # The source is a variable name, either bare or wrapped as
+            # {var: name} (matching parse._parse_reciprocal).
+            source = v_term.get("var") if isinstance(v_term, dict) else v_term
+            if source not in ds:
+                _warn_missing_variable(source)
                 continue
 
-            #A safe reciprocal that filters zeros out. 
-            var = 1.0 / xr.where(ds[v_term['var']] == 0, np.inf, ds[v_term['var']])
+            #A safe reciprocal that filters zeros out.
+            var = 1.0 / xr.where(ds[source] == 0, np.inf, ds[source])
 
             var_name = f"{namepath}_reciprocal"
             var = var.rename(var_name)
-            var.attrs["provenance"] = v_term['var']
+            var.attrs["provenance"] = source
             ds[var_name] = var
-            if v['var'] is None:
+            if v.get('var') is None:
                 v['var'] = var_name
-            if xbudget_dict["var"] is None:
+            if xbudget_dict.get("var") is None:
                 var_copy = var.copy()
                 var_copy.attrs["provenance"] = var_name
                 xbudget_dict["var"] = namepath
@@ -426,10 +511,10 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             var = var.rename(var_name)
             var.attrs["provenance"] = [Fx.name, Fy.name]
             ds[var_name] = var
-            if v["var"] is None:
+            if v.get("var") is None:
                 v["var"] = var_name
 
-            if xbudget_dict["var"] is None:
+            if xbudget_dict.get("var") is None:
                 var_copy = var.copy()
                 var_copy.attrs["provenance"] = var_name
                 xbudget_dict["var"] = namepath
@@ -543,7 +628,14 @@ def get_vars(xbudget_dict, terms):
     {'var': 'heat_rhs_sum', 'sum': ['advective_tendency']}
     """
     _warn_legacy_helper("get_vars")
-    return _get_vars(xbudget_dict, terms)
+    result = _get_vars(xbudget_dict, terms)
+    if result is None:
+        # A miss is usually a typo, but on an unfilled recipe *every* derived
+        # term misses, and the caller would get an opaque `None` (and then a
+        # TypeError on ["var"]). Explain that case rather than let it surface
+        # three lines later.
+        _require_filled_recipe(xbudget_dict, "get_vars")
+    return result
 
 def _get_vars(b, terms, k_long=""):
     """Recursive version of _get_vars for determining variable provenance tree.

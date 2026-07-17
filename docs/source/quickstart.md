@@ -47,22 +47,19 @@ That kind of bookkeeping is most of what xbudget does for you.
 
 You describe the budget once, as a nested dict — the *recipe*. Each budget has a
 `lhs` and an `rhs`; each side is built from operations (`sum`, `product`, and a
-few others). `var: null` means "xbudget fills this in":
+few others). You write `var` only to name a diagnostic; anything without one is
+something xbudget derives for you:
 
 ```python
 xbudget_dict = {
     "heat": {
-        "lhs": {"var": None, "sum": {"var": None, "tendency": {"var": "heat_tendency"}}},
+        "lhs": {"sum": {"tendency": {"var": "heat_tendency"}}},
         "rhs": {
-            "var": None,
             "sum": {
-                "var": None,
                 "advection": {"var": "advective_flux_convergence"},
                 "diffusion": {"var": "diffusive_flux_convergence"},
                 "surface_forcing": {
-                    "var": None,
                     "product": {
-                        "var": None,
                         "flux": "surface_heat_flux",
                         "area": "cell_area",
                     },
