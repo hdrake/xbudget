@@ -29,7 +29,11 @@ from .nodes import (
     Term,
     VarRef,
 )
-from .collect import _warn_missing_variable, lateral_divergence
+from .collect import (
+    _warn_if_summands_broadcast,
+    _warn_missing_variable,
+    lateral_divergence,
+)
 
 
 def _new_name(path):
@@ -193,6 +197,8 @@ class _Evaluator:
 
         if len(op_list) == 0:
             return None, None
+        if op.kind == "sum":
+            _warn_if_summands_broadcast(op_list, legacy_namepath)
         var = sum(op_list) if op.kind == "sum" else reduce(mul, op_list, 1)
         if not isinstance(var, xr.DataArray):
             # Reduced to a pure scalar (e.g. all variable operands missing);

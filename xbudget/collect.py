@@ -112,6 +112,40 @@ def _warn_missing_variable(name):
         UserWarning,
     )
 
+
+def _warn_if_summands_broadcast(op_list, name):
+    """Warn when a ``sum`` mixes operands of differing dimensionality (issue #11).
+
+    In a finite-volume budget every term of a ``sum`` should live on the same
+    grid and therefore carry identical dimensions. When they do not, ``xarray``
+    silently broadcasts the lower-rank operand across the dimensions it lacks —
+    so a 2D surface flux summed with a 3D flux convergence is spread *uniformly*
+    over the vertical rather than deposited at the single level that outcrops.
+    That is almost never the intended finite-volume broadcast, and the recipe
+    does not carry the outcropping level needed to do it correctly, so for now
+    we surface the situation loudly instead of returning a wrong budget.
+
+    Only ``xr.DataArray`` operands are compared; scalar constants (``sign``,
+    ``density``, …) are ignored.
+    """
+    dim_sets = [frozenset(o.dims) for o in op_list if isinstance(o, xr.DataArray)]
+    if len(dim_sets) < 2:
+        return
+    common = frozenset.intersection(*dim_sets)
+    broadcast_dims = frozenset.union(*dim_sets) - common
+    if broadcast_dims:
+        warnings.warn(
+            f"Summing terms with mismatched dimensions while building "
+            f"'{name}': the operands carry dimension sets "
+            f"{[tuple(sorted(s)) for s in dim_sets]}. xarray will broadcast the "
+            f"lower-dimensional term(s) across {tuple(sorted(broadcast_dims))}, "
+            f"e.g. spreading a 2D surface flux uniformly over the vertical of a "
+            f"3D flux convergence instead of depositing it at the outcropping "
+            f"level. Verify this broadcast is intended; see "
+            f"https://github.com/hdrake/xbudget/issues/11.",
+            UserWarning,
+        )
+
 def lateral_divergence(grid, Fx, Fy):
     """Horizontal flux divergence ``div(Fx, Fy)`` on cell centers, via xgcm.
 
@@ -448,6 +482,8 @@ def budget_fill_dict(data, xbudget_dict, namepath, allow_rechunk = True):
             ):
                 return None
             else:
+                if k == "sum":
+                    _warn_if_summands_broadcast(op_list, f"{namepath}_{k}")
                 var = sum(op_list) if k=="sum" else reduce(mul, op_list, 1)
                 if not isinstance(var, xr.DataArray):
                     continue
