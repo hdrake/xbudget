@@ -514,9 +514,26 @@ class BudgetQuery:
     def __getitem__(self, address):
         return self.var(address)
 
-    def __repr__(self):
+    def _summary(self):
         n_terms = len(self._by_path)
         n_live = sum(1 for v in self.terms().values() if v is not None)
         budgets = ", ".join(self.budgets)
         scope = "planned" if self._ds is None else f"{n_live}/{n_terms} materialized"
-        return f"<BudgetQuery: {budgets} ({scope})>"
+        return f"BudgetQuery: {budgets} ({scope})"
+
+    def __repr__(self):
+        return f"<{self._summary()}>"
+
+    def _repr_html_(self):
+        """Collapsible tree, annotated with each term's resolved variable name.
+
+        Terms whose diagnostics were missing from the dataset resolve to
+        ``None`` (see :meth:`_resolve_var`) and are greyed out, so the display
+        shows both the recipe's structure and what this run actually
+        materialized.
+        """
+        from .display import render_budgets_html
+
+        return render_budgets_html(
+            self.budgets, resolve=self._resolve_var, header=self._summary()
+        )

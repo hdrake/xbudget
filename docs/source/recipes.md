@@ -96,6 +96,31 @@ q.surface_lambda("heat") # -> "tos"
 q.metadata("mass")       # -> {"lambda": "density", "thickness": "thkcello"}
 ```
 
+## Seeing a recipe
+
+A real recipe nests deeply, and printed as raw JSON it is hard to read. Instead,
+`show_recipe` renders it as a collapsible tree — expand a level by clicking its
+arrow, the way an `xarray.Dataset` repr expands:
+
+```python
+xbudget.show_recipe(recipe)          # every budget
+xbudget.show_recipe(recipe, "heat")  # just one
+```
+
+In a Jupyter/VSCode notebook it displays as an interactive HTML tree (operator
+badges, diagnostics, and constants distinguished); printed at a terminal it
+falls back to an indented ASCII tree. It reads a recipe directly, so you can
+inspect one before ever running it.
+
+Once you *have* run a budget, displaying the query does the same but annotated
+with each term's resolved variable name — with terms whose diagnostics were
+missing greyed out, so the tree doubles as a map of what the run materialized:
+
+```python
+xbudget.collect_budgets(grid, recipe)
+xbudget.BudgetQuery(grid, recipe)    # same tree, annotated with run state
+```
+
 ## The operations
 
 | Operation | Shape | Produces |
