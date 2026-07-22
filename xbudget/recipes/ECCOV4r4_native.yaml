@@ -2,6 +2,16 @@
 mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
   thickness: "thkcello"
+  # GM eddy-bolus mass transports (kg/s), exposed for downstream water-mass
+  # transformation (xwmb). NOT part of the volume budget: the bolus velocity is
+  # non-divergent, so it carries zero net volume; including it only injects
+  # discretization noise and breaks native closure. In density coordinates,
+  # however, the bolus transport across isopycnals is a real transformation term,
+  # which is why xwmb needs these transports.
+  bolus:
+    x_mass_transport: "bolus_x_mass_transport"
+    y_mass_transport: "bolus_y_mass_transport"
+    z_mass_transport: "bolus_z_mass_transport"
   lhs:
     sum:
       Eulerian_tendency:
@@ -22,42 +32,24 @@ mass: # finite-volume mass budget in units of kg/s
     sum:
       advection:
         sum:
-          lateral:
-            sum:
-              eulerian_mass_flux_convergence: # div(-Fx,-Fy) = -div(Fx,Fy)
-                product: 
-                  sign: -1.0
-                  density: 1029.0
-                  volume_flux_divergence: 
-                    lateral_divergence:
-                      Fx:
-                        product: {u_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
-                      Fy:
-                        product: {v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
-              bolus_mass_flux_convergence: # div(-Fx,-Fy) = -div(Fx,Fy)
-                product:
-                  sign: -1.0
-                  density: 1029.0
-                  volume_flux_divergence:
-                    lateral_divergence:
-                      Fx:
-                        product: {u_velocity: "UVELSTAR", dyG: "dyG", dz: "drF"}
-                      Fy:
-                        product: {v_velocity: "VVELSTAR", dxG: "dxG", dz: "drF"}
-          interfacial:
-            sum: 
-              eulerian_mass_flux_convergence:
-                product:
-                  volume_flux_convergence:
-                    difference: {w_velocity: "WVELMASS_interior"} #precomputed. WVELMESS includes freshwater fluxes
-                  density: 1029.0
-                  area: "rA"
-              bolus_mass_flux_convergence:
-                product:
-                  volume_flux_convergence:
-                    difference: {w_velocity: "WVELSTAR"} #precomputed. WVELMESS includes freshwater fluxes
-                  density: 1029.0
-                  area: "rA"
+          # Eulerian-only (see the `bolus` metadata above): the GM bolus velocity
+          # is non-divergent, so it is excluded from the native volume budget.
+          lateral: # Eulerian lateral mass-flux convergence, div(-Fx,-Fy) = -div(Fx,Fy)
+            product:
+              sign: -1.0
+              density: 1029.0
+              volume_flux_divergence:
+                lateral_divergence:
+                  Fx:
+                    product: {x_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
+                  Fy:
+                    product: {y_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+          interfacial: # Eulerian vertical mass-flux convergence
+            product:
+              volume_flux_convergence:
+                difference: {z_velocity: "WVELMASS_interior"} # WVELMASS zeroed at surface to avoid double-counting oceFWflx
+              density: 1029.0
+              area: "rA"
       surface_exchange_flux:
         product:
           mass_tendency_per_unit_area: "boundary_forcing_volume_tendency"

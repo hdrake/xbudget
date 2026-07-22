@@ -409,13 +409,13 @@ a warning, usually meaning an enclosing `product:` was left out:
 
 ```yaml
 # wrong: sign/density sit directly on the term and are ignored
-bolus_convergence:
+flux_convergence:
   var: null
   sign: -1.0
   density: 1029.0
 
 # right
-bolus_convergence:
+flux_convergence:
   var: null
   product:
     var: null
@@ -423,9 +423,9 @@ bolus_convergence:
     density: 1029.0
 ```
 
-This exact malformation once dropped the eddy bolus transport from the ECCO mass
-budget entirely, and the only outward sign was that warning. They are worth
-reading rather than filtering.
+A missing `product:` wrapper like this silently changes what the term computes —
+its factors are dropped rather than multiplied in — and the only outward sign is
+that warning. They are worth reading rather than filtering.
 
 ## Contributing a recipe
 
