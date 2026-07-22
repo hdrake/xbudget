@@ -4,13 +4,20 @@ channels:
 dependencies:
   - python=3.12
   - cftime
+  - dask
   - ipython
   - jupyterlab
   - matplotlib
   - netcdf4
   - pydap
   - pytest
-  - sphinx
-  - nbsphinx
   - ipykernel
+  - xgcm>=0.10.0
+  # Docs toolchain (standardized "xeos stack": Sphinx + Furo + myst-nb).
+  # The authoritative docs-build deps live in docs/requirements.txt (pip); these
+  # mirror them so `make html` works from this conda dev env too.
+  - sphinx>=7
+  - furo
+  - myst-nb
+  - sphinx-autodoc-typehints
   - pip

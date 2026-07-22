@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
       - name: Cancel previous runs
@@ -48,3 +48,40 @@ jobs:
       - name: Test with pytest
         run: |
           pytest
+
+  docs:
+    # Read the Docs builds the hosted PR preview; this build is the pre-merge
+    # gate. It runs on fork PRs (where RTD may not), and its artifact lets you
+    # look at the rendered pages without waiting on RTD. pip-based, mirroring
+    # .readthedocs.yaml (conda dropped from the docs build).
+    name: docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install docs toolchain
+        # docs/requirements.txt installs Sphinx + Furo + myst-nb and xbudget
+        # itself (so autodoc can import it).
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
+
+      - name: Build docs
+        # Mirrors .readthedocs.yaml: html builder, fail_on_warning. --keep-going
+        # reports every warning instead of stopping at the first. Flat docs/ tree.
+        run: |
+          python -m sphinx -b html -W --keep-going docs docs/_build/html
+
+      - name: Upload rendered docs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docs-html
+          path: docs/_build/html

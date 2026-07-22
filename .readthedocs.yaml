@@ -1,28 +1,23 @@
 # Read the Docs configuration file
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
-# Required
 version: 2
 
-# Set the OS, Python version, and other tools you might need
 build:
   os: ubuntu-24.04
   tools:
-    python: "miniforge3-latest"
+    python: "3.12"
 
-# Build documentation in the "docs/" directory with Sphinx
+# Build the Sphinx docs. Warnings fail the build (matches CI's -W).
 sphinx:
-  builder: html
-  configuration: docs/source/conf.py
+  configuration: docs/conf.py
   fail_on_warning: true
 
-# Don't build any extra output files
+# Don't build any extra output formats.
 formats: []
 
+# pip-based install (conda dropped): the docs toolchain plus xbudget itself,
+# both declared in docs/requirements.txt.
 python:
   install:
-    - method: pip
-      path: .
-
-conda:
-  environment: docs/environment.yml
+    - requirements: docs/requirements.txt

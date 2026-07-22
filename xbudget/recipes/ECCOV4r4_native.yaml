@@ -1,0 +1,232 @@
+---
+mass: # finite-volume mass budget in units of kg/s
+  lambda: "density"
+  thickness: "thkcello"
+  # GM eddy-bolus mass transports (kg/s), exposed for downstream water-mass
+  # transformation (xwmb). NOT part of the volume budget: the bolus velocity is
+  # non-divergent, so it carries zero net volume; including it only injects
+  # discretization noise and breaks native closure. In density coordinates,
+  # however, the bolus transport across isopycnals is a real transformation term,
+  # which is why xwmb needs these transports.
+  bolus:
+    x_mass_transport: "bolus_x_mass_transport"
+    y_mass_transport: "bolus_y_mass_transport"
+    z_mass_transport: "bolus_z_mass_transport"
+  lhs:
+    sum:
+      Eulerian_tendency:
+        product:
+          volume_tendency:
+            product:
+              free_surface_tendency:
+                product:
+                  deta:
+                    difference: {etan: "ETAN_bounds"}
+                  dt_inv:
+                    reciprocal: {dt: {var: "dt"}}
+              volume: "volcello"
+              deptho_inv:
+                reciprocal: {deptho: {var: "Depth"}}
+          density: 1029.0
+  rhs:
+    sum:
+      advection:
+        sum:
+          # Eulerian-only (see the `bolus` metadata above): the GM bolus velocity
+          # is non-divergent, so it is excluded from the native volume budget.
+          lateral: # Eulerian lateral mass-flux convergence, div(-Fx,-Fy) = -div(Fx,Fy)
+            product:
+              sign: -1.0
+              density: 1029.0
+              volume_flux_divergence:
+                lateral_divergence:
+                  Fx:
+                    product: {x_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
+                  Fy:
+                    product: {y_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+          interfacial: # Eulerian vertical mass-flux convergence
+            product:
+              volume_flux_convergence:
+                difference: {z_velocity: "WVELMASS_interior"} # WVELMASS zeroed at surface to avoid double-counting oceFWflx
+              density: 1029.0
+              area: "rA"
+      surface_exchange_flux:
+        product:
+          mass_tendency_per_unit_area: "boundary_forcing_volume_tendency"
+          sign: 1.0
+          area: "rA"
+
+heat: # finite-volume heat budget in s* in units of J/s (W)
+  lambda: "THETA"
+  lhs:
+    sum:
+      Eulerian_tendency:
+        product:
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          volume: "volcello"
+          heatcontenttend:
+            product:
+              dt_inv:
+                reciprocal:
+                  dt:
+                    var: "dt"
+              heatcontentdiff:
+                difference:
+                  heatcontent:
+                    product: 
+                      theta: "THETA_bounds"
+                      stretching_factor:
+                        sum:
+                          one: 1.0
+                          eta_over_depth:
+                            product:
+                              eta: "ETAN_bounds"
+                              deptho_inv:
+                                reciprocal: 
+                                  deptho:
+                                    var: "Depth"
+  rhs:
+    sum:
+      advection:
+        sum:
+          lateral:
+            product:
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                product:
+                  heat_flux_divergence:
+                    lateral_divergence:
+                      Fx:
+                        product: {advx_th: "ADVx_TH"}
+                      Fy:
+                        product: {advy_th: "ADVy_TH"}
+                  sign: -1.0
+          interfacial:
+            product:
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                difference: {advr_th: "ADVr_TH"}
+      diffusion:
+        sum:
+          lateral:
+            product:
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              explicit_heat_flux_convergence:
+                product:
+                  heat_flux_divergence:
+                    lateral_divergence:
+                      Fx:
+                        product:
+                          dfx_th: "DFxE_TH"
+                      Fy:
+                        product:
+                          dfy_th: "DFyE_TH"
+                  sign: -1.0
+          explicit_vertical_diffusion:
+            product:
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                difference: {dfrE_th: "DFrE_TH"}
+          implicit_vertical_diffusion:
+            product:
+              density: 1029.0
+              specific_heat_capacity: 3994.0
+              heat_flux_convergence:
+                difference: {dfrI_th: "DFrI_TH"}
+                  
+      surface_exchange_flux:  # sum: #TFLUX, QFLUX, etc. includes freshwater forcing 
+        product:
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          boundary_heat_flux: "boundary_forcing_heat_tendency"  # deg C /s 
+      bottom_flux:
+        product:
+          density: 1029.0
+          specific_heat_capacity: 3994.0
+          surface_heat_flux: "geothermal_heat_flux_convergence"  # deg C m^3 /s 
+
+
+salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not salinity)
+  # Salt content per cell:  ρ * V * (s* SALT) * 1e-3   since SALT is in psu ~ g/kg
+  lambda: "SALT"
+  lhs:
+    sum:
+      Eulerian_tendency:
+        product:
+          density: 1029.0
+          volume: "volcello"
+          unit_conversion: 0.001
+          saltcontenttend:
+            product:
+              dt_inv:
+                reciprocal: {dt: {var: "dt"}}
+              saltcontentdiff:
+                difference:
+                  saltcontent:
+                    product:
+                      SALT: "SALT_bounds"
+                      stretching_factor:
+                        sum:
+                          one: 1.0
+                          eta_over_depth:
+                            product:
+                              eta: "ETAN_bounds"
+                              deptho_inv:
+                                reciprocal: {deptho: {var: "Depth"}}
+  rhs:
+    sum:
+      advection: 
+        sum:
+
+          lateral:
+            product:
+              density: 1029.0
+              unit_conversion: 0.001
+              sign: -1.0
+              salt_flux_divergence:
+                lateral_divergence:
+                  Fx: {product: {advx_slt: "ADVx_SLT"}}
+                  Fy: {product: {advy_slt: "ADVy_SLT"}}
+
+          interfacial:
+            product:
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                difference: {advr_slt: "ADVr_SLT"}
+
+      diffusion: 
+        sum:
+          lateral:
+            product:
+              density: 1029.0
+              unit_conversion: 0.001
+              sign: -1.0
+              salt_flux_divergence:
+                lateral_divergence:
+                  Fx: {product: {dfxe_slt: "DFxE_SLT"}}
+                  Fy: {product: {dfye_slt: "DFyE_SLT"}}
+
+          explicit_vertical_diffusion:
+            product:
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                difference: {dfrE_slt: "DFrE_SLT"}
+          implicit_vertical_diffusion:
+            product:
+              density: 1029.0
+              unit_conversion: 0.001
+              salt_flux_convergence:
+                difference: {dfrI_slt: "DFrI_SLT"}
+
+      surface_exchange_flux: # (SFLUX + oceSPtnd at k=0; oceSPtnd below) in g/m^2/s, mapped to kg/s
+        product:
+          unit_conversion_g_to_kg: 0.001
+          area: "rA"
+          salt_forcing_per_unit_area: "boundary_forcing_salt_tendency"
