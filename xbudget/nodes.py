@@ -97,11 +97,20 @@ class Term:
         provides the term's primary value.
     explicit_var : str or None
         A pre-named output variable, if the recipe pinned one (rare).
+    optional : bool
+        Declares this term's diagnostics as *expected* to be absent on some
+        datasets. When they are, the term is dropped silently — no warning, no
+        ``on_missing="raise"`` error, and no ``xbudget_incomplete`` flag on the
+        parent — instead of the loud "unexpectedly missing" treatment. This is
+        the honest, self-documenting alternative to deleting the term from the
+        recipe to quiet the warning. It suppresses missing-diagnostic alarms for
+        the *whole* subtree rooted at this term.
     """
     name: str
     path: tuple
     operations: tuple
     explicit_var: object = None
+    optional: bool = False
 
 
 @dataclass(frozen=True)

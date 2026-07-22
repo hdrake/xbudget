@@ -341,7 +341,7 @@ def _deep_search(b, new_b=None, k_last=None):
             _deep_search(v, new_b=new_b, k_last=k)
         return new_b
 
-def collect_budgets(data, recipe=None, allow_rechunk=True, name_scheme="v1", *, xbudget_dict=None):
+def collect_budgets(data, recipe=None, allow_rechunk=True, name_scheme="v1", on_missing="warn", *, xbudget_dict=None):
     """Materialize every budget term described by ``recipe`` into ``data``.
 
     The recipe dict is parsed into a typed expression tree
@@ -372,6 +372,19 @@ def collect_budgets(data, recipe=None, allow_rechunk=True, name_scheme="v1", *, 
         plus their plain "copy" aliases, **and it mutates ``recipe`` in
         place** to fill in ``var`` fields (which the legacy ``get_vars`` /
         ``aggregate`` query helpers rely on).
+    on_missing : {"warn", "raise", "ignore"} (default: "warn")
+        How to handle a *required* diagnostic that a term references but that is
+        absent from ``data``. ``"warn"`` (default) skips the term and emits one
+        end-of-run summary ``UserWarning`` naming the missing diagnostics and the
+        now-incomplete terms; ``"raise"`` raises
+        :class:`~xbudget.evaluate.MissingDiagnosticError` so a recipe/dataset
+        mismatch fails loudly; ``"ignore"`` skips silently. In every case the
+        affected variables are stamped with ``xbudget_incomplete`` /
+        ``xbudget_missing`` attributes (query them with
+        :meth:`xbudget.BudgetQuery.missing`), and a term declared ``optional`` in
+        the recipe is exempt — its absence is expected and never alarms. Only
+        ``name_scheme="v1"`` honors this; the deprecated ``"legacy"`` engine
+        keeps its historical per-variable warnings.
 
     Returns
     -------
@@ -413,7 +426,9 @@ def collect_budgets(data, recipe=None, allow_rechunk=True, name_scheme="v1", *, 
     from .evaluate import evaluate_budgets
 
     budgets = parse_budgets(recipe)
-    evaluate_budgets(data, budgets, allow_rechunk=allow_rechunk)
+    evaluate_budgets(
+        data, budgets, allow_rechunk=allow_rechunk, on_missing=on_missing
+    )
     return data
 
 def budget_fill_dict(data, recipe, namepath, allow_rechunk = True):

@@ -71,14 +71,26 @@ def _run_new(build_grid, preset):
     return ds, set(ds.data_vars) - before, alias_map, records
 
 
+def _all_zero(ds, name):
+    """True if a legacy variable is identically zero (ignoring NaNs)."""
+    return not np.any(np.nan_to_num(np.asarray(ds[name].values, dtype="float64")))
+
+
 def _assert_equivalent(build_grid, preset):
     legacy_ds, legacy_new = _run_legacy(build_grid, preset)
     new_ds, new_new, alias_map, records = _run_new(build_grid, preset)
 
     # Every legacy variable (copies + operator-suffixed actuals) is reachable
-    # from the alias map.
+    # from the alias map -- except products the typed engine deliberately drops
+    # because a required factor was missing (behavior change A). The legacy
+    # engine multiplied in 0.0 and emitted an identically-zero variable for those;
+    # the typed engine does not build them at all, so tolerate exactly the
+    # all-zero legacy leftovers (a non-zero leftover would be a real regression).
     unmapped = legacy_new - set(alias_map)
-    assert not unmapped, f"legacy names with no new equivalent: {sorted(unmapped)}"
+    nonzero_unmapped = {n for n in unmapped if not _all_zero(legacy_ds, n)}
+    assert not nonzero_unmapped, (
+        f"legacy names with no new equivalent: {sorted(nonzero_unmapped)}"
+    )
 
     # Every new variable matches its legacy counterpart numerically.
     assert set(records), "new engine produced no variables"
@@ -104,9 +116,17 @@ def _assert_equivalent(build_grid, preset):
     }
     legacy_producers = legacy_actuals | legacy_leaves
     record_targets = {rec["legacy_actual"] for rec in records.values()}
-    assert record_targets == legacy_producers, (
-        f"new->legacy targets {sorted(record_targets)} != "
-        f"legacy producers {sorted(legacy_producers)}"
+    # The typed engine produces nothing the legacy engine did not...
+    assert not (record_targets - legacy_producers), (
+        f"new targets with no legacy producer: "
+        f"{sorted(record_targets - legacy_producers)}"
+    )
+    # ...and reproduces every legacy producer except the all-zero products it
+    # now drops (behavior change A, as above).
+    dropped = legacy_producers - record_targets
+    nonzero_dropped = {n for n in dropped if not _all_zero(legacy_ds, n)}
+    assert not nonzero_dropped, (
+        f"new engine dropped non-zero legacy producers: {sorted(nonzero_dropped)}"
     )
     # No two new variables collide on a name or a legacy target (injective).
     assert len(record_targets) == len(records)

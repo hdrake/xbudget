@@ -40,6 +40,20 @@ def _name(path):
     return "_".join(path)
 
 
+def _as_list(value):
+    """Normalize an ``xbudget_missing`` attribute back to a list of names.
+
+    Stored as a list in memory, but a netCDF round-trip can hand a single-element
+    list back as a bare scalar string and a multi-element one as a numpy array,
+    so accept all three.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
+
+
 class BudgetQuery:
     """Look up the variables an xbudget run produced.
 
@@ -95,6 +109,7 @@ class BudgetQuery:
         self._diagnostics = {}   # raw diagnostic name -> [term paths using it]
         self._legacy = {}        # legacy variable name -> v1 name
         self._duplicates = {}    # v1 name -> [colliding paths]
+        self._optional_paths = set()  # paths declared optional (or under one)
 
         for budget in self.budgets.values():
             for side, term in budget.sides.items():
@@ -102,9 +117,16 @@ class BudgetQuery:
 
     # -- index construction -------------------------------------------------
 
-    def _index_term(self, term, legacy_namepath):
+    def _index_term(self, term, legacy_namepath, optional_ctx=False):
         """Register a term and its descendants in the address indices."""
         base = _name(term.path)
+        opt = optional_ctx or term.optional
+        if opt:
+            # Absence anywhere in an optional subtree is expected, so `missing()`
+            # skips it — mirroring the evaluator, which stamps no incompleteness
+            # there. Recording the whole subtree lets that check stay parent-link
+            # free.
+            self._optional_paths.add(tuple(term.path))
         if base in self._by_name and self._by_name[base] is not term:
             # "_".join(path) is not injective: ("a", "b_c") and ("a", "b", "c")
             # both give "a_b_c". Record it rather than silently overwrite.
@@ -125,15 +147,17 @@ class BudgetQuery:
             # primary gets the bare name, so the others are addressable only by
             # their suffixed name (e.g. "heat_rhs_boundary_sum").
             self._by_op_name.setdefault(f"{base}_{op.kind}", (term, op))
-            self._index_op(op, term, legacy_namepath)
+            self._index_op(op, term, legacy_namepath, opt)
 
-    def _index_op(self, op, term, legacy_namepath):
+    def _index_op(self, op, term, legacy_namepath, optional_ctx=False):
         """Register an operation's operands."""
         if isinstance(op, (Sum, Product)):
             for name, operand in op.terms:
                 if isinstance(operand, Term):
                     self._index_term(
-                        operand, f"{legacy_namepath}_{op.kind}_{name}"
+                        operand,
+                        f"{legacy_namepath}_{op.kind}_{name}",
+                        optional_ctx=optional_ctx,
                     )
                 elif isinstance(operand, VarRef):
                     self._diagnostics.setdefault(operand.name, []).append(
@@ -148,12 +172,13 @@ class BudgetQuery:
                 self._index_term(
                     op.operand,
                     f"{legacy_namepath}_difference_{op.operand.name}",
+                    optional_ctx=optional_ctx,
                 )
         elif isinstance(op, Reciprocal):
             self._diagnostics.setdefault(op.source, []).append(tuple(term.path))
         elif isinstance(op, LateralDivergence):
-            self._index_term(op.fx, f"{legacy_namepath}_Fx")
-            self._index_term(op.fy, f"{legacy_namepath}_Fy")
+            self._index_term(op.fx, f"{legacy_namepath}_Fx", optional_ctx=optional_ctx)
+            self._index_term(op.fy, f"{legacy_namepath}_Fy", optional_ctx=optional_ctx)
 
     # -- resolution ---------------------------------------------------------
 
@@ -384,6 +409,14 @@ class BudgetQuery:
             operands = self._operands(op)
             if operands is not None:
                 out[op.kind] = operands
+        if self._ds is not None:
+            missing = self._term_missing(term)
+            if missing:
+                # Surface what the term was built *without*, so a caller reading
+                # the operands is not misled into thinking they are the whole of
+                # it. Absent for a complete term; present only when something was
+                # dropped (a partial sum, or a product that did not materialize).
+                out["missing"] = missing
         return out
 
     def _operands(self, op):
@@ -400,12 +433,11 @@ class BudgetQuery:
                 elif isinstance(operand, VarRef):
                     if self._in_ds(operand.name):
                         out.append(operand.name)
-                    elif op.kind == "product":
-                        # Mirror the evaluator, which multiplies in 0.0 for a
-                        # missing factor rather than dropping it. Omitting it
-                        # here would claim the variable equals the surviving
-                        # factors when it is in fact identically zero.
-                        out.append(0.0)
+                    # An absent operand is not listed as a value. For a product
+                    # the evaluator drops the whole term (an unknown factor is
+                    # not a zero one), so a materialized product has every factor
+                    # present; a dropped one is reported through `missing()` and
+                    # the `"missing"` key of `get_vars`, never as a fake 0.0.
             return out
         if isinstance(op, Difference):
             if isinstance(op.operand, VarRef):
@@ -418,6 +450,129 @@ class BudgetQuery:
             fluxes = [self._resolve_var(op.fx), self._resolve_var(op.fy)]
             return [f for f in fluxes if f is not None]
         return None
+
+    # -- completeness -------------------------------------------------------
+
+    def _require_term(self, address):
+        """Resolve an address to a Term, or raise (for the completeness API)."""
+        term = self._lookup(address)  # raises for a bad path/type
+        if term is None:
+            raise self._unknown(address)
+        return term
+
+    def _op_missing(self, op):
+        """Immediate inputs of one operation that are absent from the dataset."""
+        out = []
+        if isinstance(op, (Sum, Product)):
+            for label, operand in op.terms:
+                if isinstance(operand, VarRef):
+                    if not self._in_ds(operand.name):
+                        out.append(operand.name)
+                elif isinstance(operand, Term):
+                    if self._resolve_var(operand) is None:
+                        out.append(label)
+        elif isinstance(op, Difference):
+            if isinstance(op.operand, VarRef):
+                if not self._in_ds(op.operand.name):
+                    out.append(op.operand.name)
+            elif self._resolve_var(op.operand) is None:
+                out.append(op.operand.name)
+        elif isinstance(op, Reciprocal):
+            if not self._in_ds(op.source):
+                out.append(op.source)
+        elif isinstance(op, LateralDivergence):
+            for flux in (op.fx, op.fy):
+                if self._resolve_var(flux) is None:
+                    out.append(flux.name)
+        return out
+
+    def _structural_missing(self, term):
+        """Immediate inputs of a *non-materialized* term that are absent."""
+        missing = []
+        if isinstance(term.explicit_var, str) and not self._in_ds(term.explicit_var):
+            missing.append(term.explicit_var)
+        for op in term.operations:
+            missing.extend(self._op_missing(op))
+        return missing
+
+    def _term_missing(self, term):
+        """Inputs this term was built without: ``[]`` when complete.
+
+        For a materialized term the authoritative answer is the ``xbudget_missing``
+        attribute the evaluator stamped (which already respects ``optional``);
+        for a term that did not materialize at all there is no attribute to read,
+        so fall back to the recipe structure. A term flagged incomplete only
+        because a *descendant* dropped something carries no ``xbudget_missing`` of
+        its own and returns ``[]`` here — the culprit descendant reports it.
+        """
+        name = self._resolve_var(term)
+        if name is not None:
+            attr = self._ds[name].attrs.get("xbudget_missing")
+            return _as_list(attr)
+        return self._structural_missing(term)
+
+    def is_complete(self, address):
+        """Whether a term was built from all the inputs its recipe names.
+
+        Returns ``True`` for a fully-materialized term, ``False`` for one that is
+        incomplete (a dropped operand somewhere beneath it) or was not
+        materialized at all, and ``None`` when the query has no dataset to check
+        against (``BudgetQuery(None, recipe)``), where completeness is unknowable.
+        """
+        if self._ds is None:
+            return None
+        term = self._require_term(address)
+        name = self._resolve_var(term)
+        if name is None:
+            return False
+        return not self._ds[name].attrs.get("xbudget_incomplete")
+
+    def incomplete_terms(self):
+        """Names of every materialized variable flagged ``xbudget_incomplete``.
+
+        Read straight from the dataset the evaluator wrote, so it also works on a
+        dataset reopened from disk. Includes terms flagged only because a
+        descendant dropped an input; use :meth:`missing` for the inputs that were
+        actually absent. Empty when there is no dataset to inspect.
+        """
+        if self._ds is None:
+            return []
+        return sorted(
+            str(v)
+            for v in self._ds.data_vars
+            if self._ds[v].attrs.get("xbudget_incomplete")
+        )
+
+    def missing(self, address=None):
+        """Report inputs a recipe named that the dataset did not supply.
+
+        With ``address``, return the list of inputs *that term* was built
+        without (``[]`` if it is complete). With no argument, return
+        ``{term_path: [missing inputs]}`` for every term that dropped at least
+        one required input — both partial sums and products that did not
+        materialize. Terms declared ``optional`` (and everything beneath them)
+        are omitted: their absence is expected, which is the whole point of the
+        flag.
+
+        Raises ``ValueError`` when the query has no dataset (``BudgetQuery(None,
+        recipe)``), because what is present is exactly what cannot be known then.
+        """
+        if self._ds is None:
+            raise ValueError(
+                "missing() needs a dataset to know which diagnostics are "
+                "present; this query was built with data=None. Rebuild it as "
+                "BudgetQuery(data, recipe)."
+            )
+        if address is not None:
+            return self._term_missing(self._require_term(address))
+        out = {}
+        for path, term in self._by_path.items():
+            if path in self._optional_paths:
+                continue
+            miss = self._term_missing(term)
+            if miss:
+                out[path] = miss
+        return out
 
     def aggregate(self, decompose=()):
         """Collapse each budget to its top-level terms and their variable names.

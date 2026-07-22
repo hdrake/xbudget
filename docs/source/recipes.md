@@ -288,13 +288,105 @@ one particular run. Another reason to leave `name_scheme` alone.
 BudgetParseError: 'sum' at heat/rhs must be a dict, got str.
 ```
 
-**Missing diagnostics warn and skip.** If your dataset does not have a variable
-a term references, that term is skipped with a `UserWarning` and everything else
-still builds. This is deliberate: one recipe can serve datasets with
-different diagnostics available. It also means a budget can fail to close simply
-because a term was silently dropped, so it is worth reading those warnings —
-`BudgetQuery.var()` returns `None` for a term that was not materialized, which
-is the programmatic way to check.
+**Missing diagnostics skip — but never silently forget.** If your dataset does
+not have a variable a term references, that term is skipped and everything else
+still builds. This is deliberate: one recipe can serve datasets with different
+diagnostics available. The danger is a budget that looks complete but isn't — a
+term quietly dropped, a residual you blame on numerics. xbudget is built so that
+never happens without a trace.
+
+Take the [Quickstart](quickstart.md) budget, but run it against a dataset that is
+missing `surface_heat_flux`:
+
+```python
+>>> import warnings
+>>> with warnings.catch_warnings(record=True) as w:
+...     warnings.simplefilter("always")
+...     xbudget.collect_budgets(ds, recipe)   # ds has no surface_heat_flux
+>>> print(w[-1].message)
+xbudget: missing diagnostic(s) ['surface_heat_flux']; 1 budget term(s) are now
+incomplete: ['heat_rhs']. The affected variables carry
+`xbudget_incomplete`/`xbudget_missing` attrs; query them with
+BudgetQuery.missing(). Mark expected-absent terms `optional` in the recipe to
+silence this, or use on_missing='raise' to fail instead.
+```
+
+One summary at the end of the run — not one warning per operand — naming both the
+absent diagnostic and the *consequence*: which budget term is now incomplete.
+
+**Incompleteness is a durable, queryable property, not just a warning.** Every
+variable built from fewer inputs than its recipe describes is stamped, and the
+stamp survives being written to disk and reopened:
+
+```python
+>>> ds["heat_rhs"].attrs
+{'provenance': ['heat_rhs_advection', 'heat_rhs_diffusion'],
+ 'xbudget_path': ['heat', 'rhs'], 'xbudget_op': 'sum',
+ 'xbudget_incomplete': 1, 'xbudget_missing': ['surface_forcing']}
+```
+
+`provenance` says what went *in*; `xbudget_missing` says what was supposed to and
+didn't. The query layer reads both back — including on a reopened dataset:
+
+```python
+>>> q = xbudget.BudgetQuery(ds, recipe)
+>>> q.is_complete("heat_rhs")
+False
+>>> q.missing()
+{('heat', 'rhs'): ['surface_forcing'],
+ ('heat', 'rhs', 'surface_forcing'): ['surface_heat_flux']}
+>>> q.incomplete_terms()
+['heat_rhs']
+>>> q.get_vars("heat_rhs")
+{'var': 'heat_rhs', 'sum': ['heat_rhs_advection', 'heat_rhs_diffusion'],
+ 'missing': ['surface_forcing']}
+```
+
+Note that `aggregate()` shows only what actually materialized, so a dropped term
+just isn't there — that is exactly the trap `missing()` exists to close. Reach
+for `missing()` / `is_complete()` whenever a budget doesn't close.
+
+**A missing product factor drops the term — it is not multiplied by zero.** A
+`sum` keeps its surviving operands (and is flagged incomplete); a `product` needs
+every factor, so if one is absent the whole term is *not built*. `q.var()` returns
+`None` for it, rather than a variable full of zeros that would read as a real,
+null contribution to whatever consumes it. (Before v0.7.0 the engine fabricated
+that zero; see the CHANGELOG.)
+
+**Choosing how loud to be: `on_missing`.** The default is `"warn"` (the summary
+above). Two other policies:
+
+```python
+xbudget.collect_budgets(ds, recipe, on_missing="raise")   # fail on any required gap
+xbudget.collect_budgets(ds, recipe, on_missing="ignore")  # skip silently
+```
+
+`"raise"` turns a recipe/dataset mismatch into a `MissingDiagnosticError` (its
+`.missing` attribute lists every gap at once) — use it when you need a guarantee
+that the recipe matched the data. `"ignore"` is silent but **still stamps the
+`xbudget_incomplete` attributes**, so the record survives even when the warning
+doesn't.
+
+**Declaring an expected absence: `optional`.** Some diagnostics are legitimately
+absent on some datasets, and you don't want a warning every run. Mark the term
+`optional` instead of deleting it — the intent stays documented in the recipe,
+and the term is dropped with no warning, no `on_missing="raise"` error, and no
+`incomplete` flag on its parent:
+
+```yaml
+rhs:
+  sum:
+    advection: {var: "advective_flux_convergence"}
+    eddy_bolus:            # only some model configurations output this
+      optional: true
+      product:
+        flux: "bolus_flux"
+        area: "cell_area"
+```
+
+`optional` covers the whole subtree beneath it. It is the honest alternative to
+deleting a term to quiet a warning — deleting erases the fact that the term was
+ever expected; `optional` keeps it.
 
 **Stray keys warn.** A key that is neither `var` nor an operation is ignored with
 a warning, usually meaning an enclosing `product:` was left out:

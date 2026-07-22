@@ -80,6 +80,18 @@ new scheme at your own pace, but do adopt it.
    parameter is named `data` (a grid or dataset), matching its long-standing
    behavior of accepting either.
 
+4. **A `product` with a missing required factor is now dropped, not fabricated
+   as zero.** The old engine multiplied a missing factor in as `0.0`, emitting an
+   identically-zero variable that looked like a real (null) contribution to
+   whatever consumed it — the classic "the term is there when it isn't." An
+   unknown factor is not a zero one, so the typed engine no longer builds the
+   term at all; `BudgetQuery.var()` returns `None` for it and it is reported by
+   `missing()`. A `sum` is unaffected — it still drops only the missing operand
+   and builds from the rest (now flagged incomplete). This changes results only
+   where a product actually referenced an absent diagnostic; a literal `0.`
+   *constant* in a recipe (e.g. `lambda_mass: 0.` in the salt budget) is a real
+   factor and is unchanged.
+
 ### New
 
 - **`var: null` placeholders are no longer needed.** Write `var` only when you
@@ -132,6 +144,29 @@ new scheme at your own pace, but do adopt it.
   name and `records` maps each new variable to its `{path, op, ...}` metadata.
 - Each derived variable carries `xbudget_path` (structured identity),
   `xbudget_op` (operation kind), and `provenance` (immediate inputs) attributes.
+- **Missing diagnostics can no longer mislead you into thinking a term is there.**
+  A term built from fewer inputs than its recipe describes now says so, durably
+  and queryably:
+  - Affected variables are stamped `xbudget_incomplete: 1` and `xbudget_missing:
+    [...]` (the inputs that were expected but absent). These persist to disk, so
+    the record survives a save/reopen — where a warning would not.
+  - `BudgetQuery` reads them back: `is_complete(term)`, `missing(term=None)`
+    (what each term was built without), `incomplete_terms()` (every flagged
+    variable), and a `"missing"` key on `get_vars`. Incompleteness propagates, so
+    an ancestor of a dropped term is flagged too. On a recipe-only query
+    (`data=None`) completeness is reported as unknown rather than guessed.
+  - `collect_budgets(..., on_missing=...)` selects the policy: `"warn"` (default)
+    emits **one** end-of-run summary naming the missing diagnostics and the
+    now-incomplete terms (instead of one warning per operand); `"raise"` raises
+    the new `xbudget.MissingDiagnosticError` (its `.missing` lists every gap);
+    `"ignore"` is silent but still stamps the attributes.
+  - A recipe term may declare `optional: true` to mark a diagnostic as *expected*
+    to be absent on some datasets. Its whole subtree is then exempt — dropped
+    with no warning, no `raise`, and no `incomplete` flag — which documents the
+    intent in the recipe instead of deleting the term to quiet the warning.
+
+  The deprecated `name_scheme="legacy"` engine keeps its historical
+  per-variable warnings and zero-fill behavior unchanged.
 - **ECCOv4r4 / LLC90 support in the typed engine.** The `reciprocal` and
   `lateral_divergence` operations and a `difference` of a *computed sub-term*
   (not just a raw variable) are all handled, so the native-grid ECCO mass/heat/

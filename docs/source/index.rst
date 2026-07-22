@@ -24,6 +24,7 @@ New here? The :doc:`quickstart` closes a budget in about thirty lines, with made
    installation
    quickstart
    recipes
+   examples/handling_missing_diagnostics
    examples/MOM6_budget_examples_mass_heat_salt
    examples/eccov4r4_budget_examples_mass_heat_salt
    examples/eccov4r4_heat_budget_decomposition

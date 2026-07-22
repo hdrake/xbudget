@@ -106,6 +106,11 @@ def _parse_term(node, path, name):
     for key, value in node.items():
         if key == "var":
             continue
+        if key == "optional":
+            # A recognized term-level flag, not an operation and not a stray
+            # key: read below via node.get("optional"), so skip it here (and do
+            # not warn about it as an unexpected key).
+            continue
         if key in NARY_OPS:
             operations.append(_parse_nary(key, value, path))
         elif key == "difference":
@@ -135,6 +140,7 @@ def _parse_term(node, path, name):
         path=path,
         operations=tuple(operations),
         explicit_var=node.get("var"),
+        optional=bool(node.get("optional", False)),
     )
 
 

@@ -110,6 +110,39 @@ Zero, because we built the data to balance. With real model output you would
 expect something small but non-zero, and a residual that is *not* small usually
 means a term is missing from your recipe or is on the wrong side.
 
+## When a term is missing
+
+The other common reason a budget doesn't close: your dataset didn't have a
+diagnostic the recipe asked for. xbudget skips that term rather than erroring —
+one recipe can serve datasets with different diagnostics — but it never does so
+silently. Drop `surface_heat_flux` from the data and collect again:
+
+```python
+>>> xbudget.collect_budgets(ds, recipe)
+UserWarning: xbudget: missing diagnostic(s) ['surface_heat_flux']; 1 budget
+term(s) are now incomplete: ['heat_rhs']. ...
+```
+
+The term that couldn't be built is dropped, and everything that depended on it is
+flagged — durably, on the variable itself, so it survives being saved and
+reopened:
+
+```python
+>>> q = xbudget.BudgetQuery(ds, recipe)
+>>> q.is_complete("heat_rhs")
+False
+>>> q.missing()
+{('heat', 'rhs'): ['surface_forcing'],
+ ('heat', 'rhs', 'surface_forcing'): ['surface_heat_flux']}
+```
+
+So a budget is never quietly incomplete: `is_complete()` and `missing()` tell you
+exactly what was left out. If a missing diagnostic should be an error instead, pass
+`on_missing="raise"`; if its absence is *expected*, mark that term `optional` in
+the recipe. See [Writing a recipe](recipes.md) for the full story, and
+[Handling missing diagnostics](examples/handling_missing_diagnostics.ipynb) for a
+worked, runnable example.
+
 ## Where did a term come from?
 
 Every variable xbudget derives carries its own provenance:

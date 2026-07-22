@@ -236,11 +236,12 @@ def test_aggregate_decompose_sum_whose_only_child_shares_its_name(synthetic_grid
     assert rhs["boundary_boundary"] in synthetic_grid._ds
 
 
-def test_get_vars_product_reports_missing_factor_as_zero(synthetic_grid):
-    """A product with a missing factor is identically zero; say so.
+def test_product_with_missing_factor_is_dropped_not_zeroed(synthetic_grid):
+    """A product missing a required factor is not materialized at all.
 
-    The evaluator multiplies in 0.0 rather than dropping the absent factor, so
-    reporting only the surviving factors would imply the variable equals them.
+    The evaluator no longer multiplies in 0.0 (which fabricated an identically
+    zero variable that read as a real, null contribution). An unknown factor is
+    not a zero one, so the whole term is dropped and reported as such.
     """
     preset = {"tracer": {"rhs": {"product": {"d": "not_present", "area": "area"}}}}
     with warnings.catch_warnings():
@@ -248,10 +249,17 @@ def test_get_vars_product_reports_missing_factor_as_zero(synthetic_grid):
         xbudget.collect_budgets(synthetic_grid, preset)
     q = BudgetQuery(synthetic_grid, preset)
 
-    assert q.get_vars("tracer_rhs")["product"] == [0.0, "area"]
-    # ...which is what the evaluator recorded, and what the values show.
-    assert synthetic_grid._ds["tracer_rhs"].attrs["provenance"] == [0.0, "area"]
-    assert float(abs(synthetic_grid._ds["tracer_rhs"]).max()) == 0.0
+    # No zero-filled variable landed in the dataset.
+    assert "tracer_rhs" not in synthetic_grid._ds
+    assert q.var("tracer_rhs") is None
+    assert q.is_complete("tracer_rhs") is False
+    # get_vars lists the surviving factor and names the one that went missing —
+    # never a fake 0.0.
+    out = q.get_vars("tracer_rhs")
+    assert out["var"] is None
+    assert out["product"] == ["area"]
+    assert out["missing"] == ["not_present"]
+    assert q.missing("tracer_rhs") == ["not_present"]
 
 
 def test_aggregate_preserves_budget_metadata(collected):
