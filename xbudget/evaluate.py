@@ -434,6 +434,23 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
     -------
     records : dict
         New variable name -> metadata (``{"path": [...], "op": kind}``).
+
+    Examples
+    --------
+    Parse a recipe to a typed tree, then evaluate it into a grid (or dataset).
+    The derived variables are written into ``data`` in place; ``records`` maps
+    each new name to its structural identity:
+
+    >>> budgets = xbudget.parse_budgets(recipe)
+    >>> records = xbudget.evaluate_budgets(grid, budgets)
+    >>> records["heat_rhs"]
+    {'path': ['heat', 'rhs'], 'op': 'sum'}
+    >>> grid._ds["heat_rhs"]           # the derived variable now lives in the data
+    <xarray.DataArray 'heat_rhs' ...>
+
+    ``collect_budgets`` is the usual one-call entry point (it parses and
+    evaluates); call ``evaluate_budgets`` directly when you already hold a parsed
+    tree or want to control the two steps separately.
     """
     return _Evaluator(
         data, allow_rechunk=allow_rechunk, on_missing=on_missing

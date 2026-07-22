@@ -35,12 +35,10 @@ q.aggregate(decompose=["diffusion"])   # was: xbudget.aggregate(d, decompose=["d
 | `aggregate(d, decompose=...)` | `q.aggregate(decompose=...)` |
 | `disaggregate`, `deep_search` | `q.aggregate` / `q.get_vars` |
 | `budget_fill_dict` | `collect_budgets` |
-| `collect_budgets(..., name_scheme="legacy")` | `collect_budgets(...)` (typed engine only) |
 | `xbudget_dict=` keyword argument | `recipe=` |
 | `flatten`, `flatten_lol` | *(removed; no replacement)* |
 
-`collect_budgets` no longer accepts `name_scheme` — there is only the typed
-engine — and no longer accepts the `xbudget_dict=` alias for `recipe`.
+`collect_budgets`'s second parameter is now named `recipe` (was `xbudget_dict`).
 
 ### Breaking changes
 
@@ -89,7 +87,7 @@ engine — and no longer accepts the `xbudget_dict=` alias for `recipe`.
   This was always true of the parser — a missing `var` and an explicit
   `var: null` have always read the same — but every shipped recipe was
   written the verbose way, so it read as mandatory. The placeholders are now
-  gone from all five shipped recipes (412 lines; `MOM6.yaml` 352 → 244),
+  gone from all five shipped recipes (412 lines; `MOM6.yaml` 349 → 241),
   with the parse trees verified byte-identical before and after.
 
   ```yaml
@@ -188,10 +186,9 @@ engine — and no longer accepts the `xbudget_dict=` alias for `recipe`.
 - **The dict-walking engine and its recipe-reading helpers.** `budget_fill_dict`,
   `aggregate`, `get_vars`, `disaggregate`, `deep_search`, and the `flatten` /
   `flatten_lol` utilities are gone. Use `collect_budgets` + `BudgetQuery`.
-- **`name_scheme`** — `collect_budgets` no longer accepts it; the typed engine's
-  naming is the only behavior.
-- **The `xbudget_dict=` keyword argument** of `collect_budgets`, `parse_budgets`,
-  `save_yaml`, and `BudgetQuery` — the argument is `recipe`.
+- **The `xbudget_dict=` keyword argument** of `collect_budgets` — its second
+  parameter is now named `recipe`. (The new `parse_budgets`, `save_yaml`, and
+  `BudgetQuery` take `recipe` as well.)
 - The `xbudget/llc90` module (`diff_2d_flux_llc90`), the hand-rolled LLC90 flux
   stitcher. `lateral_divergence` now uses native xgcm for any face-connected
   grid; the two were verified bit-identical on the ECCO grid before it went.
@@ -203,9 +200,8 @@ engine — and no longer accepts the `xbudget_dict=` alias for `recipe`.
   the public argument name. Concretely:
   - the `xbudget/conventions/` directory of shipped YAMLs → `xbudget/recipes/`
     (`load_preset_budget` is unchanged; it reads from the new path);
-  - the `docs/source/conventions.md` guide → `recipes.md` ("Writing a recipe");
-  - the recipe argument of `collect_budgets`, `parse_budgets`, `save_yaml`, and
-    `BudgetQuery` is now named `recipe`.
+  - `collect_budgets`'s recipe argument is renamed `xbudget_dict` → `recipe`
+    (the new `parse_budgets`, `save_yaml`, and `BudgetQuery` take `recipe` too).
 
   ("Convention" in the sense of a sign/ordering choice is untouched.)
 

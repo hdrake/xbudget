@@ -107,6 +107,18 @@ def collect_budgets(data, recipe, allow_rechunk=True, on_missing="warn"):
     -------
     data : xgcm.Grid or xr.Dataset
         The same object passed in, for convenience.
+
+    Examples
+    --------
+    Load a preset recipe, collect its budgets into a grid, and query the result:
+
+    >>> recipe = xbudget.load_preset_budget(model="MOM6")
+    >>> xbudget.collect_budgets(grid, recipe)      # adds derived vars in place
+    >>> q = xbudget.BudgetQuery(grid, recipe)
+    >>> q.var("heat_rhs")                          # the closed RHS heat tendency
+    'heat_rhs'
+    >>> grid._ds["heat_rhs"].attrs["xbudget_path"]
+    ['heat', 'rhs']
     """
     from .parse import parse_budgets
     from .evaluate import evaluate_budgets

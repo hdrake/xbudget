@@ -3,6 +3,3 @@ __pycache__
 /data/*
 .pytest_cache
 .DS_Store
-# copied in from examples/ at build time by docs/source/conf.py
-/docs/source/examples/
-/docs/build/

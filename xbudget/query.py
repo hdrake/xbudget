@@ -70,14 +70,25 @@ class BudgetQuery:
 
     Examples
     --------
+    Address a term by its path and get back the flat variable name the engine
+    emitted — no need to hand-assemble the compound name yourself:
+
     >>> xbudget.collect_budgets(grid, recipe)
     >>> q = xbudget.BudgetQuery(grid, recipe)
-    >>> q.var("heat_lhs_advection")
-    'heat_lhs_advection'
-    >>> grid._ds[q.var("heat_lhs_advection")]
-    <xarray.DataArray 'heat_lhs_advection' ...>
-    >>> q.aggregate()["heat"]["rhs"]
-    {'advection': 'heat_rhs_advection', 'diffusion': 'heat_rhs_diffusion', ...}
+    >>> q.var(("mass", "rhs", "advection", "lateral", "zonal_convergence"))
+    'mass_rhs_advection_lateral_zonal_convergence'
+
+    Ask what a term is *built from*, not just its own name:
+
+    >>> q.get_vars("heat_rhs")
+    {'var': 'heat_rhs',
+     'sum': ['heat_rhs_diffusion', 'heat_rhs_surface_exchange_flux', ...]}
+
+    Read budget state the engine does not build but downstream code depends on —
+    here the mass-budget layer thickness that ``xwmt.WaterMass`` needs:
+
+    >>> q.thickness("mass")
+    'thkcello'
 
     See also
     --------

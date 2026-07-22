@@ -1,4 +1,4 @@
-"""Tests for the v1 query layer (BudgetQuery).
+"""Tests for the query layer (BudgetQuery).
 
 These all run on the synthetic grid, deliberately: CI has neither example
 dataset, so anything gated on real data would never protect this code.
@@ -25,7 +25,7 @@ RECIPES = sorted(
 
 @pytest.fixture
 def collected(synthetic_grid, synthetic_preset):
-    """A grid with the synthetic budget collected (v1) + its query."""
+    """A grid with the synthetic budget collected + its query."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # 'not_present' is missing by design
         xbudget.collect_budgets(synthetic_grid, synthetic_preset)
@@ -290,7 +290,7 @@ def test_contains_rejects_unknown_names(collected):
     assert ("no", "such", "path") not in q
     assert 42 not in q
     # ...while everything `var()` accepts is still reported as present
-    assert "tracer_rhs_diffusion" in q            # a term by v1 name
+    assert "tracer_rhs_diffusion" in q            # a term by name
     assert ("tracer", "rhs", "diffusion") in q    # a term by path
     assert "diag_a" in q                          # a raw diagnostic
     assert "tracer_rhs_boundary_sum" in q         # an operation-suffixed name

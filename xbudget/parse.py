@@ -43,6 +43,15 @@ def parse_budgets(recipe):
     Returns
     -------
     dict of str -> Budget
+
+    Examples
+    --------
+    >>> recipe = xbudget.load_preset_budget(model="MOM6")
+    >>> budgets = xbudget.parse_budgets(recipe)
+    >>> list(budgets)
+    ['mass', 'heat', 'salt']
+    >>> budgets["heat"].metadata
+    {'lambda': 'thetao', 'surface_lambda': 'tos'}
     """
     if not isinstance(recipe, dict):
         raise BudgetParseError(

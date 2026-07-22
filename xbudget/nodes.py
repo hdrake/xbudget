@@ -1,11 +1,9 @@
 """Typed expression tree for xbudget recipes.
 
 An xbudget recipe (the nested ``recipe`` dict loaded from YAML) describes
-how to build each budget term from raw model diagnostics. Historically that
-recipe was walked directly as untyped nested dicts, with a node's meaning
-inferred from which magic keys it happened to carry. These dataclasses give the
-recipe an explicit, immutable shape so the parser, evaluator, and query helpers
-can dispatch on node *type* instead of probing dict keys.
+how to build each budget term from raw model diagnostics. These dataclasses give
+the recipe an explicit, immutable shape so the parser, evaluator, and query
+helpers can dispatch on node *type* instead of probing dict keys.
 
 The grammar (mirrors the YAML, see ``recipes/*.yaml``)::
 
