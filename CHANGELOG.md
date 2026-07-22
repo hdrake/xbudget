@@ -55,10 +55,12 @@ q.aggregate(decompose=["diffusion"])   # was: xbudget.aggregate(d, decompose=["d
    | `heat_rhs_sum_diffusion_sum_lateral_product` | `heat_rhs_diffusion_lateral` |
    | `mass_rhs_sum_advection_sum_lateral_sum_zonal_convergence_product_zonal_divergence_difference` | `mass_rhs_advection_lateral_zonal_convergence_zonal_divergence` |
 
-   On the example MOM6 grid this reduces 108 variables to 57; on the ECCOv4r4
-   LLC90 grid, 140 to 75. The canonical identity of each variable is also stored
-   structurally in its `xbudget_path` attribute (a list of term names), so you
-   never need to parse the flat name.
+   On the example MOM6 grid this reduces 108 variables to 57; the ECCOv4r4 LLC90
+   native-grid recipe materializes 73 (Eulerian volume budget — the GM bolus is
+   exposed as metadata rather than a budget term; see the ECCO note below). The
+   canonical identity of each variable is also stored structurally in its
+   `xbudget_path` attribute (a list of term names), so you never need to parse
+   the flat name.
 
 2. **`collect_budgets` no longer mutates the recipe dict.** It previously filled
    each node's `var` field in place; it now leaves `recipe` untouched and returns
@@ -158,12 +160,32 @@ q.aggregate(decompose=["diffusion"])   # was: xbudget.aggregate(d, decompose=["d
   (not just a raw variable) are all handled, so the native-grid ECCO mass/heat/
   salt budgets evaluate. New `ECCOV4r4_native` recipe and example notebooks
   (`eccov4r4_budget_examples_mass_heat_salt`, `eccov4r4_heat_budget_decomposition`).
+  The example loader (`examples/load_example_ecco_grid.py`) assembles the budget
+  from the per-collection ECCO V4r4 (2010, LLC90) files on Zenodo
+  (DOI 10.5281/zenodo.21479854) — monthly-mean fluxes, month-boundary snapshots,
+  grid geometry, and geothermal input — which carry every diagnostic the recipe
+  needs. All three budgets close (mass/heat/salt residuals ~3e-4 / 5e-6 / 6e-4 of
+  the tendency, pointwise, over the full year).
+- **The ECCO volume budget is Eulerian-only, and the GM bolus is exposed as
+  metadata for water-mass transformation.** The bolus (GM eddy) velocity is
+  non-divergent, so it carries *zero net volume* and does not belong in the
+  native volume budget — including it only injects discretization noise (the
+  archived `U/V/WVELSTAR` are non-divergent to ~6% under xgcm's operators, and
+  that residual accumulates down the column into a spurious convergence larger
+  than the true mass tendency). ECCO's own budget tutorials build the volume
+  budget from `UVELMASS`/`VVELMASS`/`WVELMASS` alone, and the heat/salt fluxes
+  (`ADV*_TH`/`ADV*_SLT`) are already residual-mean (bolus included), so the eddy
+  advection is *already* in those budgets. The bolus is not discarded: a new
+  `bolus` metadata block on the mass budget names its mass transports
+  (`bolus_{x,y,z}_mass_transport`), read via `BudgetQuery.bolus_transports()`,
+  because the bolus transport across isopycnals *is* a real transformation term
+  in density coordinates (`xwmb` consumes it).
 - **`lateral_divergence` now uses native xgcm** (`grid.diff` with
   `other_component` + `face_connections`) instead of a hand-rolled LLC90 flux
   stitcher, so it is correct on any face-connected topology xgcm supports rather
   than LLC90 specifically. Verified bit-identical (zero differing elements) to
-  the old stitcher under xgcm 0.10.0, on the full 13-tile ECCO grid, for both the
-  Eulerian and bolus mass-flux pairs. The `xbudget/llc90` module is removed.
+  the old stitcher under xgcm 0.10.0, on the full 13-tile ECCO grid, for the
+  Eulerian mass-flux fields. The `xbudget/llc90` module is removed.
 - **Broadcast guard (issue #11).** When a `sum` mixes a 2D surface flux with a 3D
   flux convergence, xarray silently broadcasts the 2D operand across the vertical.
   The engine now emits a `UserWarning` naming the term and the broadcast
@@ -171,13 +193,6 @@ q.aggregate(decompose=["diffusion"])   # was: xbudget.aggregate(d, decompose=["d
 
 ### Fixed
 
-- **ECCO mass budget: the lateral eddy-bolus transport was silently dropped.**
-  The `bolus_mass_flux_convergence` term in `ECCOV4r4_native.yaml` was missing
-  its enclosing `product:` wrapper, so its `sign`/`density`/`volume_flux_divergence`
-  children sat directly on the term and were ignored — the GM bolus velocity
-  (`UVELSTAR`/`VVELSTAR`) contributed nothing to the mass budget. The wrapper is
-  now restored, so the bolus convergence is materialized and included. **This
-  changes ECCO mass-budget results** (the bolus term is no longer zero).
 - The `difference` operation now raises a clear `ValueError` up front when no
   grid is supplied, instead of an opaque `NameError`.
 

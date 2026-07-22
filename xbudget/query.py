@@ -311,6 +311,24 @@ class BudgetQuery:
         """
         return self.metadata(budget).get("surface_lambda")
 
+    def bolus_transports(self, budget="mass"):
+        """The GM eddy-bolus mass-transport variables a budget declares, or ``{}``.
+
+        Returns the ``bolus`` metadata block — the face mass transports (kg/s)
+        of the parameterized eddy (GM bolus) velocity, e.g.
+        ``{"x_mass_transport": "bolus_x_mass_transport", "y_...": ..., "z_...": ...}``.
+
+        The bolus is deliberately *absent* from the (Eulerian) volume budget: it
+        is non-divergent and carries zero net volume, so including it would only
+        break native closure. In density coordinates, though, the bolus transport
+        across isopycnals is a real water-mass-transformation term, so it is
+        exposed here for downstream consumers (``xwmb``) rather than discarded.
+
+        Returns ``{}`` if the budget declares no ``bolus``. Raises ``KeyError``
+        for an unknown budget, as :meth:`metadata` does.
+        """
+        return dict(self.metadata(budget).get("bolus", {}))
+
     def terms(self):
         """Map every term path to its variable name (``None`` if not materialized)."""
         return {path: self._resolve_var(term) for path, term in self._by_path.items()}
