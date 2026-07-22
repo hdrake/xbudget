@@ -21,8 +21,8 @@ import xbudget
 rng = np.random.default_rng(0)
 dims, coords = ("x", "y"), {"x": [0, 1, 2], "y": [0, 1, 2]}
 
-advection = rng.random((3, 3))
-diffusion = rng.random((3, 3))
+advection = rng.random((3, 3))          # W  (flux convergence, already area-integrated)
+diffusion = rng.random((3, 3))          # W  (flux convergence, already area-integrated)
 surface_flux = rng.random((3, 3))       # W m-2
 cell_area = np.full((3, 3), 1.0e6)      # m2
 
@@ -175,7 +175,15 @@ recipe = xbudget.load_yaml("my_model.yaml")
 ```
 
 `save_yaml` validates before writing, so a malformed recipe fails while you are
-writing it rather than the next time someone loads it.
+writing it rather than the next time someone loads it:
+
+```python
+>>> broken = {"heat": {"rhs": {"sum": "not a dict"}}}
+>>> xbudget.save_yaml(broken, "my_model.yaml")
+BudgetParseError: 'sum' at heat/rhs must be a dict, got str.
+```
+
+Nothing lands on disk — the error is raised before the file is opened.
 
 ## Your own model
 

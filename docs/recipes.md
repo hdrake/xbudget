@@ -43,21 +43,24 @@ Three things are going on:
 
 **`var` names a diagnostic — and you only write it when you have one to name.**
 `tendency: {var: "opottemptend"}` is a leaf: it points straight at a variable in
-your dataset. Everything else is *derived*, and you say nothing at all — the
+your dataset. All other variables are inferred and *derived* by `xbudget` — the
 absence of `var` is what marks a quantity xbudget computes for you.
 
 ```{note}
 You may see `var: null` scattered through older recipes (and through
-xbudget's own, before v0.7.0). It was never required: the parser reads a missing
-`var` and an explicit `var: null` as the same thing. If you have such a
-recipe it keeps working untouched — but new ones can leave the placeholders
-out, which is roughly a third fewer lines.
+xbudget's own, before v0.7.0). The pre-v0.7.0 engine read `var` by direct
+subscript, so it *did* require the key to be present on every derived term —
+remove it and you got a `KeyError`. The v0.7.0 parser dropped that requirement:
+it reads a missing `var` and an explicit `var: null` identically. Old recipes
+keep working untouched, but new ones can leave the placeholders out, which is
+roughly a third fewer lines.
 ```
 
-**Operands are named.** The keys under a `sum` or `product` (`flux_per_unit_area`,
-`area`) are labels you choose. They are not looked up anywhere — they name the
-term for your own benefit, and they become part of the output variable name, so
-pick names you would want to read later.
+**Operands are named.** The keys under a `sum` or `product` (e.g.,
+`flux_per_unit_area` and `area`) are labels you choose. They are not looked up
+anywhere — they name the term for your own benefit, and they become part of the
+output variable name inferred by xbudget, so pick names you would want to read
+later.
 
 **Bare numbers are constants.** A `sign: -1.` or `density: 1035.` operand is used
 as a scalar, which is how recipes flip a sign or convert units:
@@ -83,8 +86,11 @@ heat:
 
 Metadata describes budget *state* the engine does not build but downstream tools
 depend on. In particular the mass budget's `thickness` (e.g. `"thkcello"`) is its
-prognostic layer-thickness variable — the core input `xwmt.WaterMass` needs to
-build its vertical metrics. Read metadata through the query layer rather than
+prognostic layer-thickness variable, which
+[`xwmt`](https://github.com/hdrake/xwmt) — the water-mass transformation package
+whose needs motivated xbudget in the first place — relies on to build the
+vertical metrics of its `xwmt.WaterMass` object. Read metadata through the query
+layer rather than
 reaching into the raw dict, so it is independent of the naming scheme and works
 on a reopened dataset:
 
@@ -146,6 +152,17 @@ zonal_divergence:
 
 The operand can also be a computed sub-term rather than a raw diagnostic, in
 which case it is evaluated first and then differenced.
+
+```{warning}
+Prefer `lateral_divergence` over `difference` for **horizontal** flux
+convergences. A one-axis `difference` differences within a single logical grid,
+so it is only correct where that axis is contiguous; it silently gives the wrong
+answer across the seams of a tiled topology (e.g. the ECCO LLC90 faces).
+`lateral_divergence` forms the full `div(Fx, Fy)` through xgcm's face-connected
+differencing, which stitches those seams correctly. Reach for a bare
+`difference` only for a genuinely one-dimensional convergence (e.g. a vertical
+one) or on a grid you know has no face connections.
+```
 
 **`reciprocal`** inverts a variable, named bare or as `{var: name}`:
 
