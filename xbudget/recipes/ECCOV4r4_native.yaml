@@ -41,13 +41,13 @@ mass: # finite-volume mass budget in units of kg/s
               volume_flux_divergence:
                 lateral_divergence:
                   Fx:
-                    product: {u_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
+                    product: {x_velocity: "UVELMASS", dyG: "dyG", dz: "drF"}
                   Fy:
-                    product: {v_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
+                    product: {y_velocity: "VVELMASS", dxG: "dxG", dz: "drF"}
           interfacial: # Eulerian vertical mass-flux convergence
             product:
               volume_flux_convergence:
-                difference: {w_velocity: "WVELMASS_interior"} # WVELMASS zeroed at surface to avoid double-counting oceFWflx
+                difference: {z_velocity: "WVELMASS_interior"} # WVELMASS zeroed at surface to avoid double-counting oceFWflx
               density: 1029.0
               area: "rA"
       surface_exchange_flux:
