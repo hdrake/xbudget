@@ -52,40 +52,36 @@ jobs:
   docs:
     # Read the Docs builds the hosted PR preview; this build is the pre-merge
     # gate. It runs on fork PRs (where RTD may not), and its artifact lets you
-    # look at the rendered pages without waiting on RTD.
+    # look at the rendered pages without waiting on RTD. pip-based, mirroring
+    # .readthedocs.yaml (conda dropped from the docs build).
     name: docs
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash -l {0}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Conda setup
-        uses: conda-incubator/setup-miniconda@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          channels: conda-forge
-          activate-environment: docs_env_xbudget
-          auto-activate-base: false
+          python-version: "3.12"
 
-      - name: Set up conda environment
-        # `conda`, not `mamba`: setup-miniconda already selects the libmamba
-        # solver, so this resolves just as fast without installing mamba first.
+      - name: Install docs toolchain
+        # docs/requirements.txt installs Sphinx + Furo + myst-nb and xbudget
+        # itself (so autodoc can import it).
         run: |
-          conda env update -f docs/environment.yml
-          python -m pip install -e .
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
 
       - name: Build docs
         # Mirrors .readthedocs.yaml: html builder, fail_on_warning. --keep-going
-        # reports every warning instead of stopping at the first.
+        # reports every warning instead of stopping at the first. Flat docs/ tree.
         run: |
-          python -m sphinx -b html -W --keep-going docs/source docs/build/html
+          python -m sphinx -b html -W --keep-going docs docs/_build/html
 
       - name: Upload rendered docs
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: docs-html
-          path: docs/build/html
+          path: docs/_build/html

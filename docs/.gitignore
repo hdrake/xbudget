@@ -1,0 +1,7 @@
+# Sphinx build output
+_build/
+build/
+
+# Generated at build time by conf.py / autosummary — not source
+examples/
+generated/

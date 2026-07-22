@@ -1,0 +1,11 @@
+# Documentation build dependencies (pip; standardized across hdrake's packages).
+# Kept separate from pyproject.toml on purpose.
+sphinx>=7
+furo
+myst-nb                    # MyST Markdown + notebook rendering (supersedes nbsphinx + myst-parser)
+sphinx-autodoc-typehints
+
+# Install xbudget itself so autodoc can import every module. The relative path
+# resolves against the directory pip runs in, so install from the repo root:
+#     pip install -r docs/requirements.txt
+.
