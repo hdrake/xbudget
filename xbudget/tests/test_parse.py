@@ -115,9 +115,9 @@ def test_structural_errors_raise(bad):
     ],
 )
 def test_tolerated_malformations_warn_and_skip(tolerated):
-    """The parser mirrors the legacy engine: it warns and skips placeholders /
-    malformed-but-ignorable terms rather than failing, so real recipes that
-    contain unavailable-diagnostic placeholders still load."""
+    """The parser warns and skips placeholders / malformed-but-ignorable terms
+    rather than failing, so real recipes that contain unavailable-diagnostic
+    placeholders still load."""
     with pytest.warns(UserWarning):
         budgets = parse_budgets(tolerated)
     # the offending operation is skipped, leaving the term with no operations

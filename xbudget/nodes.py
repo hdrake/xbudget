@@ -55,7 +55,7 @@ class Difference:
 
     ``operand`` is either a :class:`VarRef` (a raw diagnostic) or a nested
     :class:`Term` (a quantity computed first, then differenced) — both expose a
-    ``.name`` for legacy naming.
+    ``.name``.
     """
     operand: object
     kind = "difference"

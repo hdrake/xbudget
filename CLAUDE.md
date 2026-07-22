@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `xbudget` wrangles finite-volume budgets (mass, heat, salt) diagnosed from ocean General Circulation Models — primarily MOM6 — into closed budgets using `xarray` and `xgcm`. The library's job is to take a dataset of raw model diagnostics plus a *recipe* describing how those diagnostics combine, and materialize every intermediate and aggregate term as a named variable in the dataset.
 
-The engine is a typed expression tree (`parse -> evaluate`). The recipe/YAML format has been stable across that refactor; what changed in 0.7.0 is the in-memory representation, the default output variable names, and the fact that the recipe is no longer mutated. `CHANGELOG.md` has the migration guide, including the deprecations headed for v1.0.
+The engine is a typed expression tree (`parse -> evaluate`). The recipe/YAML format has been stable across that refactor; what changed in 0.7.0 is the in-memory representation, the output variable names, and the fact that the recipe is no longer mutated. 0.7.0 is a **breaking release**: the old dict-walking engine and its recipe-reading helpers were removed outright (not deprecated). `CHANGELOG.md` has the migration guide.
 
 ## Commands
 
@@ -15,10 +15,10 @@ Tests use `pytest` (no separate build/lint step). The base conda environment may
 ```bash
 pytest                                          # full suite
 pytest xbudget/tests/test_parse.py              # one file
-pytest xbudget/tests/test_utilities.py::TestCollectBudgets::test_collect_budgets_basic   # one test
+pytest xbudget/tests/test_collect.py::TestCollectBudgets::test_collect_budgets_basic   # one test
 ```
 
-The end-to-end characterization and engine-equivalence tests need the ~600 MB example MOM6 dataset (gitignored, fetched from Zenodo); they **skip** when it is absent. Regenerate the characterization golden after an intended change with `XBUDGET_REGEN_CHARN=1 pytest xbudget/tests/test_characterization.py -s`.
+The end-to-end characterization test needs the ~600 MB example MOM6 dataset (gitignored, fetched from Zenodo); it **skips** when the file is absent. Regenerate the characterization golden after an intended change with `XBUDGET_REGEN_CHARN=1 pytest xbudget/tests/test_characterization.py -s`.
 
 Dev environment (conda + editable install):
 
@@ -34,7 +34,7 @@ The central abstraction is the **`recipe`** — a nested provenance tree (loaded
 
 ### The recipe tree (input format — unchanged)
 
-Top-level keys are budgets (`mass`, `heat`, `salt`). Each budget has `lhs` and/or `rhs` sub-trees plus metadata keys (`lambda`, `thickness`, `surface_lambda`) that the engine does not interpret. Within a side, terms nest recursively. Every node carries a `var` key (a variable name, or `null` for derived terms) plus optionally one or more **operation** keys:
+Top-level keys are budgets (`mass`, `heat`, `salt`). Each budget has `lhs` and/or `rhs` sub-trees plus metadata keys (`lambda`, `thickness`, `surface_lambda`) that the engine does not interpret. Within a side, terms nest recursively. A node names a diagnostic with a `var` key (`var: "thetao"`); a derived term omits `var` entirely (the `var: null` placeholders are optional as of 0.7.0) and carries one or more **operation** keys instead:
 
 - `sum` — add the child terms together
 - `product` — multiply child terms (scalar numbers allowed as factors, e.g. `density: 1035.`, `sign: -1.`)
@@ -47,42 +47,41 @@ A node may carry more than one operation (e.g. a bulk `product` and an equivalen
 ### The typed engine (parse → evaluate)
 
 ```
-recipe ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets──▶ derived variables + alias map
+recipe ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets──▶ derived variables + records
 ```
 
-- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference`/`Reciprocal`/`LateralDivergence` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations. The native `lateral_divergence` helper lives in `collect.py` and is shared by both engines.
-- **`parse.py`** — `parse_budgets(dict) -> {name: Budget}`. The single source of schema truth; validates and raises `BudgetParseError` naming the offending path on malformed recipes.
-- **`evaluate.py`** — `evaluate_budgets(data, budgets)` walks the tree and materializes **one variable per operation**, named by its term path with operator infixes dropped (e.g. `heat_rhs_diffusion_lateral`). It is pure with respect to the recipe (never mutates it); it only writes derived variables into the dataset. Each variable gets `xbudget_path` (structured identity), `xbudget_op` (the operation kind), and `provenance` (immediate inputs) attrs. Returns `(alias_map, records)` — `alias_map` maps every legacy name to its new name; `records` maps each new variable to its metadata. Dispatch is on node type (`Difference` requires an `xgcm.Grid` in its signature, so a grid-less difference fails fast with a clear error).
+- **`nodes.py`** — immutable dataclasses: `Budget`, `Term`, and the operations `Sum`/`Product`/`Difference`/`Reciprocal`/`LateralDivergence` plus `Constant`/`VarRef`. A `Term` carries its structured `path` (its canonical identity) and may hold multiple operations. The native `lateral_divergence` helper lives in `collect.py`.
+- **`parse.py`** — `parse_budgets(recipe) -> {name: Budget}`. The single source of schema truth; validates and raises `BudgetParseError` naming the offending path on malformed recipes.
+- **`evaluate.py`** — `evaluate_budgets(data, budgets)` walks the tree and materializes **one variable per operation**, named by its term path with operator infixes dropped (e.g. `heat_rhs_diffusion_lateral`). When a term has several operations, the first `sum`/`product` (or a lone op) claims the bare path name; siblings are suffixed with their operator kind. It is pure with respect to the recipe (never mutates it); it only writes derived variables into the dataset. Each variable gets `xbudget_path` (structured identity), `xbudget_op` (the operation kind), and `provenance` (immediate inputs) attrs. Returns `records` (each new variable name → its `{path, op}` metadata). Dispatch is on node type (`Difference` requires an `xgcm.Grid` in its signature, so a grid-less difference fails fast with a clear error).
 - **`collect.py`** — the public surface:
-  - `collect_budgets(data, recipe, allow_rechunk=True, name_scheme="v1")` → parses then evaluates. **`v1` (default)** uses the simplified names and does **not** mutate the recipe dict. **`legacy`** reuses `budget_fill_dict` to reproduce the historical operator-suffixed names *and* fill the recipe dict in place.
-  - `budget_fill_dict(...)` → the legacy dict-walking engine, retained as a reference implementation (pinned by the equivalence test) and used by `name_scheme="legacy"`. It mutates both the dataset and the recipe dict.
-  - `aggregate` / `disaggregate` / `deep_search` / `get_vars` → the *legacy* dict-based query helpers. **They read the `var` fields that the legacy engine fills**, so they only work after a `name_scheme="legacy"` run. All deprecated (`FutureWarning`), removed in v1.0; use `query.py` instead. Deliberately **not** re-pointed at v1: a legacy-filled recipe is indistinguishable from a clean one, so doing so would return v1 names for a dataset holding legacy names.
-- **`query.py`** — `BudgetQuery(data, recipe)`, the v1 query layer: `.var(term)`, `.get_vars(term)`, `.aggregate(decompose=...)`, `.terms()`, `.alias_map`. Built from (data, recipe) rather than a live run, so it works on a reopened dataset. Resolution is a 3-rung rule mirroring `evaluate.py` (v1 primary name → `explicit_var` → operation-suffixed name) and it **checks the dataset** rather than predicting names: which operation owns a term's bare name is a runtime fact (if the primary op is skipped for a missing diagnostic, a sibling claims it), so a recipe-only reading would be wrong, not just optimistic. Rung 2 is also why one implementation serves both engines — a legacy-filled recipe resolves to its legacy names.
+  - `collect_budgets(data, recipe, allow_rechunk=True, on_missing="warn")` → parses then evaluates. Uses the simplified names and does **not** mutate the recipe dict. This is the only engine (0.7.0 removed the old dict-walking one).
+  - `lateral_divergence(grid, Fx, Fy)` → native-xgcm horizontal flux divergence, used by the evaluator.
+- **`query.py`** — `BudgetQuery(data, recipe)`, the query layer: `.var(term)`, `.get_vars(term)`, `.aggregate(decompose=...)`, `.terms()`, plus completeness (`missing`/`is_complete`/`incomplete_terms`) and budget-metadata accessors (`metadata`/`thickness`/`lambda_var`/`surface_lambda`). Built from (data, recipe) rather than a live run, so it works on a reopened dataset. Resolution is a 3-rung rule mirroring `evaluate.py` (primary name → `explicit_var` → operation-suffixed name) and it **checks the dataset** rather than predicting names: which operation owns a term's bare name is a runtime fact (if the primary op is skipped for a missing diagnostic, a sibling claims it), so a recipe-only reading would be wrong, not just optimistic. (Rung 2, `explicit_var`, also resolves a leaf term to its raw diagnostic before `collect_budgets` has run.)
 - **`presets.py`** — `load_preset_budget` / `load_yaml` / `save_yaml`. `save_yaml` validates via `parse_budgets` before writing and dumps with `sort_keys=False` (key order drives operand order).
 
 ### Key behaviors to know
 
-- **Naming changed (major-version cleanup).** `v1` emits one variable per node/operation with operator infixes dropped; the legacy engine emitted duplicate "copy" variables (108 → 57 on the MOM6 example). Use `name_scheme="legacy"` or the `alias_map` to bridge. `CHANGELOG.md` has the old→new table.
-- **Missing diagnostics are skipped with a `UserWarning`, not an error** — a `sum`/`product` containing missing inputs collapses accordingly, so one recipe can serve datasets with different available diagnostics.
+- **Naming.** One variable per node/operation with operator infixes dropped; no duplicate "copy" variables (108 → 57 on the MOM6 example, 140 → 75 on ECCO). `CHANGELOG.md` has the old→new table for anyone migrating from 0.6.x.
+- **Missing diagnostics are skipped, not fatal** — a `sum` drops only the missing operand and builds from the rest (flagged `xbudget_incomplete`); a `product` with a missing *required* factor is dropped entirely (an unknown factor is not a zero one). `collect_budgets(on_missing="warn"|"raise"|"ignore")` sets the policy; `optional: true` on a term exempts its subtree. Query it back with `BudgetQuery.missing()`.
 - **`difference` rechunking:** `allow_rechunk=True` (default) temporarily rechunks the difference dimension into a single chunk (required by `grid.diff`) then restores chunking.
-- **Lenient parser.** `parse.py` mirrors the legacy engine: it **warns and skips** unavailable-diagnostic placeholders (e.g. a `null`-source `difference`) and stray non-operation keys instead of failing, so real recipes with such terms still load. (This tolerance previously masked the malformed `bolus_mass_flux_convergence` term in `ECCOV4r4_native.yaml` — missing its `product:` wrapper, so the eddy bolus transport was silently dropped from the mass budget; that has since been fixed in the recipe.)
+- **Lenient parser.** `parse.py` **warns and skips** unavailable-diagnostic placeholders (e.g. a `null`-source `difference`) and stray non-operation keys instead of failing, so real recipes with such terms still load. (This tolerance previously masked the malformed `bolus_mass_flux_convergence` term in `ECCOV4r4_native.yaml` — missing its `product:` wrapper, so the eddy bolus transport was silently dropped from the mass budget; that has since been fixed in the recipe.)
 - **xgcm version:** requires **xgcm >= 0.10.0** — `lateral_divergence` needs native face-connected differencing, first shipped there. 0.10.0 also removed `xgcm.Grid`'s `periodic` argument and renamed `boundary` to `padding` (both now raise `ValueError`), so every grid construction in `examples/` and `tests/` uses `padding=`; `periodic=False` translates to `padding="fill"`.
 
 ### Tests
 
 - `test_parse.py` — parser units + validation; asserts all shipped recipes parse; covers the tolerated-malformation path.
-- `test_evaluate_equivalence.py` — proves the typed engine is numerically identical to the legacy `budget_fill_dict`: a synthetic grid (always), the MOM6 grid, and the **ECCO LLC90 grid** (both gated on their data files; the ECCO case exercises reciprocal, difference-of-sub-term, and native `lateral_divergence`).
-- `test_characterization.py` (+ `characterization_MOM6.json`) — golden snapshot of the typed engine's absolute MOM6 output.
-- `test_utilities.py` — the legacy engine, `aggregate`/`get_vars`/`disaggregate`, and `collect_budgets` behavior. The four legacy-helper classes carry a class-level `filterwarnings("ignore::FutureWarning")` (they test the deprecated path on purpose); `TestLegacyHelperDeprecation` pins that each helper warns *exactly once* — which is what the `disaggregate`/`_disaggregate` split exists for.
-- `test_query.py` — the v1 query layer, all on the synthetic grid so it actually runs in CI.
-- `conftest.py` — `synthetic_grid` / `synthetic_preset` fixtures shared by the equivalence and query tests, plus `SYNTHETIC_PRESET_SKIPS` (a preset whose structurally-primary op is skipped at run time — the regression test for name resolution being a runtime fact).
+- `test_characterization.py` (+ `characterization_MOM6.json`) — golden snapshot of the engine's absolute MOM6 output (data-gated; exercises reciprocal/difference-of-sub-term only via the real recipe locally).
+- `test_collect.py` — `collect_budgets` behavior (no recipe mutation, lhs/rhs, the grid-guard on `difference`).
+- `test_query.py` — the query layer, all on the synthetic grid so it actually runs in CI.
+- `test_missing_handling.py` / `test_optional_var.py` / `test_broadcast_warning.py` / `test_display.py` — missing-diagnostic handling, `var: null` optionality, the issue-#11 broadcast guard, and the tree display; all synthetic-grid, CI-safe.
+- `conftest.py` — `synthetic_grid` / `synthetic_preset` fixtures, plus `SYNTHETIC_PRESET_SKIPS` (a preset whose structurally-primary op is skipped at run time — the regression test for name resolution being a runtime fact).
 
-**CI has neither example dataset**, so every data-gated test skips there. Only the synthetic-grid tests actually protect the engine in CI; `lateral_divergence` and `reciprocal` are exercised *only* by the ECCO test, i.e. only locally.
+**CI has neither example dataset**, so every data-gated test skips there. Only the synthetic-grid tests actually protect the engine in CI; `lateral_divergence` and `reciprocal` on a real face-connected grid are exercised *only* by the data-gated characterization / ECCO notebooks locally.
 
 ## Data & examples
 
 - `examples/load_example_model_grid.py` — `load_MOM6_coarsened_diagnostics()` builds a MOM6 `xgcm.Grid` (X/Y center/outer, `areacello` metric). `examples/load_example_ecco_grid.py` — `load_ECCOV4r4_coarsened_diagnostics()` builds the ECCO **LLC90** grid with 13-tile `face_connections`. Both download from Zenodo, cached in `data/` (gitignored; only `data/README.md` tracked).
-- Notebooks: `MOM6_budget_examples_mass_heat_salt.ipynb`; `eccov4r4_budget_examples_mass_heat_salt.ipynb` (ECCO closure); `eccov4r4_heat_budget_decomposition.ipynb` (ECCO heat decomposition). All three use the default `v1` engine and `BudgetQuery`; nothing shipped depends on the deprecated path any more.
+- Notebooks: `MOM6_budget_examples_mass_heat_salt.ipynb`; `eccov4r4_budget_examples_mass_heat_salt.ipynb` (ECCO closure); `eccov4r4_heat_budget_decomposition.ipynb` (ECCO heat decomposition); `handling_missing_diagnostics.ipynb`. All use `collect_budgets` + `BudgetQuery`.
 - Re-executing a notebook needs a kernel whose env has xgcm >= 0.10.0 and the Zenodo data. Their `kernelspec` is `name: python3`, which nbconvert resolves to the *default* python3 kernel — not necessarily the project env — so pass `--ExecutePreprocessor.kernel_name=<your-registered-kernel>` explicitly or it fails on `import xgcm`.
 - Docs (`docs/source/`) are Sphinx with `myst_parser` (for `.md`) + `nbsphinx` (notebooks copied in from `examples/` at build time by a hook in `conf.py`). `quickstart.md` and `recipes.md` are hand-written. Build locally with `cd docs && make html`, or exactly as CI does: `python -m sphinx -b html -W --keep-going docs/source docs/build/html`. `-W` mirrors `.readthedocs.yaml`'s `fail_on_warning: true` — a broken cross-reference fails the build.
 - Docs are built three ways, deliberately: the `docs` job in `ci.yml` (pre-merge gate, uploads the rendered HTML as a `docs-html` artifact), Read the Docs PR builds (the hosted preview link on the PR), and RTD `latest` on merge. If you change the Sphinx config, keep the CI command and `.readthedocs.yaml` in agreement.

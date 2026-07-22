@@ -113,7 +113,7 @@ def synthetic_grid_builder():
 
 @pytest.fixture
 def synthetic_preset():
-    """A fresh copy: the legacy engine fills `var` fields in place."""
+    """A fresh copy for each test."""
     import copy
 
     return copy.deepcopy(SYNTHETIC_PRESET)

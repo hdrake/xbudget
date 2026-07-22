@@ -32,48 +32,18 @@ def _fmt(path):
     return "/".join(str(p) for p in path) or "<root>"
 
 
-def _resolve_recipe(recipe, xbudget_dict, func):
-    """Return the recipe, honoring the deprecated ``xbudget_dict`` alias.
-
-    ``xbudget_dict`` was the historical name for the recipe dict. It is still
-    accepted as a keyword so existing callers keep working, but it warns and is
-    removed in xbudget v1.0. Shared by the public entry points that take a
-    recipe (:func:`parse_budgets`, :func:`~xbudget.collect.collect_budgets`,
-    :func:`~xbudget.presets.save_yaml`, :class:`~xbudget.query.BudgetQuery`).
-    """
-    if xbudget_dict is not None:
-        if recipe is not None:
-            raise TypeError(
-                f"{func}() received both `recipe` and the deprecated "
-                f"`xbudget_dict`; pass only `recipe`."
-            )
-        warnings.warn(
-            f"The `xbudget_dict` argument of {func}() is deprecated and will be "
-            f"removed in xbudget v1.0; pass the recipe as `recipe` instead.",
-            FutureWarning,
-            stacklevel=3,
-        )
-        return xbudget_dict
-    if recipe is None:
-        raise TypeError(f"{func}() missing required argument: 'recipe'")
-    return recipe
-
-
-def parse_budgets(recipe=None, *, xbudget_dict=None):
+def parse_budgets(recipe):
     """Parse a recipe dict into ``{budget_name: Budget}``.
 
     Parameters
     ----------
     recipe : dict
         A recipe in xbudget format (e.g. from ``load_preset_budget``).
-    xbudget_dict : dict, optional
-        Deprecated alias for ``recipe``; removed in xbudget v1.0.
 
     Returns
     -------
     dict of str -> Budget
     """
-    recipe = _resolve_recipe(recipe, xbudget_dict, "parse_budgets")
     if not isinstance(recipe, dict):
         raise BudgetParseError(
             f"Top-level xbudget recipe must be a dict, got "
@@ -124,10 +94,10 @@ def _parse_term(node, path, name):
         elif key in SPECIAL_OPS:
             operations.append(_parse_lateral_divergence(value, path))
         else:
-            # The legacy engine silently ignores keys that are neither `var`
-            # nor an operation (e.g. a `sign`/`density` scalar left directly on
-            # a term because its enclosing `product:` was omitted). Mirror that
-            # tolerance, but warn so the malformation is visible.
+            # Tolerate keys that are neither `var` nor an operation (e.g. a
+            # `sign`/`density` scalar left directly on a term because its
+            # enclosing `product:` was omitted) rather than failing the whole
+            # parse, but warn so the malformation is visible.
             warnings.warn(
                 f"Ignoring unexpected key '{key}' on term at {_fmt(path)}; "
                 f"expected 'var' or one of {sorted(OPERATION_KEYS)}. This term "
@@ -164,8 +134,7 @@ def _parse_nary(kind, body, path):
 def _parse_operand(value, path, name):
     """Parse one operand of a sum/product: constant, var reference, or term."""
     if value is None:
-        # Tolerated: a placeholder operand with no content (legacy behavior
-        # silently skipped these).
+        # Tolerated: a placeholder operand with no content is skipped.
         return None
     if isinstance(value, dict):
         return _parse_term(value, path, name)
@@ -187,8 +156,8 @@ def _parse_operand(value, path, name):
 def _single_operand(kind, body, path):
     """Return the single non-``var`` (name, value) of a unary op body, or None.
 
-    Warns and returns ``None`` for the malformed/placeholder cases the legacy
-    engine tolerates (zero or several operands).
+    Warns and returns ``None`` for the tolerated malformed/placeholder cases
+    (zero or several operands).
     """
     if not isinstance(body, dict):
         raise BudgetParseError(
@@ -211,7 +180,7 @@ def _parse_difference(body, path):
 
     The operand is either a raw variable name (``VarRef``) or a nested term that
     is computed first and then differenced (``Term``). Returns ``None`` for an
-    unavailable-diagnostic placeholder, matching the legacy engine.
+    unavailable-diagnostic placeholder.
     """
     operand = _single_operand("difference", body, path)
     if operand is None:

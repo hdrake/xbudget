@@ -7,7 +7,7 @@ way out — see :doc:`the recipes guide </recipes>` for the schema.
 import yaml
 from os import path
 
-from .parse import parse_budgets, _resolve_recipe
+from .parse import parse_budgets
 
 __all__ = ["load_preset_budget", "load_yaml", "save_yaml"]
 
@@ -66,7 +66,7 @@ def load_yaml(filepath):
         return yaml.safe_load(stream)
 
 
-def save_yaml(recipe=None, filepath=None, *, xbudget_dict=None):
+def save_yaml(recipe, filepath):
     """Write a recipe to a yaml file, after checking that it is valid.
 
     Validating here means a malformed recipe cannot reach disk: you get a
@@ -83,8 +83,6 @@ def save_yaml(recipe=None, filepath=None, *, xbudget_dict=None):
         A recipe in xbudget format.
     filepath : str
         Path to write to.
-    xbudget_dict : dict, optional
-        Deprecated alias for ``recipe``; removed in xbudget v1.0.
 
     Raises
     ------
@@ -93,8 +91,7 @@ def save_yaml(recipe=None, filepath=None, *, xbudget_dict=None):
 
     Examples
     --------
-    >>> recipe = {"heat": {"rhs": {"var": None, "sum": {
-    ...     "var": None, "forcing": {"var": "surface_heat_flux"}}}}}
+    >>> recipe = {"heat": {"rhs": {"sum": {"forcing": {"var": "surface_heat_flux"}}}}}
     >>> xbudget.save_yaml(recipe, "my_model.yaml")
     >>> xbudget.load_yaml("my_model.yaml") == recipe
     True
@@ -103,7 +100,6 @@ def save_yaml(recipe=None, filepath=None, *, xbudget_dict=None):
     --------
     load_yaml, xbudget.parse_budgets
     """
-    recipe = _resolve_recipe(recipe, xbudget_dict, "save_yaml")
     if filepath is None:
         raise TypeError("save_yaml() missing required argument: 'filepath'")
     parse_budgets(recipe)  # raises BudgetParseError before we write

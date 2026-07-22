@@ -6,15 +6,9 @@ user actually has afterwards: *what is this term called?*, *what went into it?*,
 and *what are the top-level terms of this budget?* — without them needing to
 know the naming rule or parse flat variable names.
 
-It is the v1 replacement for the ``get_vars``/``aggregate`` helpers in
-:mod:`xbudget.collect`, which only work after a (deprecated)
-``name_scheme="legacy"`` run because they read ``var`` fields that the legacy
-engine fills into the recipe by mutating it.
-
 A :class:`BudgetQuery` is built from the same two things the run used — the data
 and the recipe — so it also works on a dataset reopened from disk long after the
-run, and (via ``explicit_var``, see :meth:`BudgetQuery._resolve_var`) on a recipe
-a legacy run already filled in.
+run.
 """
 import difflib
 
@@ -30,7 +24,7 @@ from .nodes import (
     Term,
     VarRef,
 )
-from .parse import parse_budgets, _resolve_recipe
+from .parse import parse_budgets
 
 __all__ = ["BudgetQuery"]
 
@@ -73,8 +67,6 @@ class BudgetQuery:
     recipe : dict
         The recipe used for the run (e.g. from
         :func:`~xbudget.presets.load_preset_budget`).
-    xbudget_dict : dict, optional
-        Deprecated alias for ``recipe``; removed in xbudget v1.0.
 
     Examples
     --------
@@ -92,8 +84,7 @@ class BudgetQuery:
     xbudget.parse_budgets, xbudget.evaluate_budgets
     """
 
-    def __init__(self, data, recipe=None, *, xbudget_dict=None):
-        recipe = _resolve_recipe(recipe, xbudget_dict, "BudgetQuery")
+    def __init__(self, data, recipe):
         if isinstance(data, xgcm.grid.Grid):
             self._ds = data._ds
         else:
@@ -103,21 +94,20 @@ class BudgetQuery:
         # Address indices, all built by walking the tree. Names are matched
         # exactly and never split on "_": real term names contain underscores
         # (e.g. "Eulerian_tendency"), so splitting would mis-parse them.
-        self._by_name = {}       # v1 primary variable name -> Term
-        self._by_op_name = {}    # v1 operation-suffixed name -> (Term, Operation)
+        self._by_name = {}       # primary variable name -> Term
+        self._by_op_name = {}    # operation-suffixed name -> (Term, Operation)
         self._by_path = {}       # path tuple -> Term
         self._diagnostics = {}   # raw diagnostic name -> [term paths using it]
-        self._legacy = {}        # legacy variable name -> v1 name
-        self._duplicates = {}    # v1 name -> [colliding paths]
+        self._duplicates = {}    # name -> [colliding paths]
         self._optional_paths = set()  # paths declared optional (or under one)
 
         for budget in self.budgets.values():
-            for side, term in budget.sides.items():
-                self._index_term(term, f"{budget.name}_{side}")
+            for term in budget.sides.values():
+                self._index_term(term)
 
     # -- index construction -------------------------------------------------
 
-    def _index_term(self, term, legacy_namepath, optional_ctx=False):
+    def _index_term(self, term, optional_ctx=False):
         """Register a term and its descendants in the address indices."""
         base = _name(term.path)
         opt = optional_ctx or term.optional
@@ -134,7 +124,6 @@ class BudgetQuery:
             self._duplicates[base].append(term.path)
         self._by_name.setdefault(base, term)
         self._by_path[tuple(term.path)] = term
-        self._legacy.setdefault(legacy_namepath, base)
 
         if isinstance(term.explicit_var, str):
             self._diagnostics.setdefault(term.explicit_var, []).append(
@@ -142,23 +131,18 @@ class BudgetQuery:
             )
 
         for op in term.operations:
-            self._legacy.setdefault(f"{legacy_namepath}_{op.kind}", base)
             # A term with several operations emits one variable each; only the
             # primary gets the bare name, so the others are addressable only by
             # their suffixed name (e.g. "heat_rhs_boundary_sum").
             self._by_op_name.setdefault(f"{base}_{op.kind}", (term, op))
-            self._index_op(op, term, legacy_namepath, opt)
+            self._index_op(op, term, opt)
 
-    def _index_op(self, op, term, legacy_namepath, optional_ctx=False):
+    def _index_op(self, op, term, optional_ctx=False):
         """Register an operation's operands."""
         if isinstance(op, (Sum, Product)):
             for name, operand in op.terms:
                 if isinstance(operand, Term):
-                    self._index_term(
-                        operand,
-                        f"{legacy_namepath}_{op.kind}_{name}",
-                        optional_ctx=optional_ctx,
-                    )
+                    self._index_term(operand, optional_ctx=optional_ctx)
                 elif isinstance(operand, VarRef):
                     self._diagnostics.setdefault(operand.name, []).append(
                         tuple(term.path)
@@ -169,16 +153,12 @@ class BudgetQuery:
                     tuple(term.path)
                 )
             else:
-                self._index_term(
-                    op.operand,
-                    f"{legacy_namepath}_difference_{op.operand.name}",
-                    optional_ctx=optional_ctx,
-                )
+                self._index_term(op.operand, optional_ctx=optional_ctx)
         elif isinstance(op, Reciprocal):
             self._diagnostics.setdefault(op.source, []).append(tuple(term.path))
         elif isinstance(op, LateralDivergence):
-            self._index_term(op.fx, f"{legacy_namepath}_Fx", optional_ctx=optional_ctx)
-            self._index_term(op.fy, f"{legacy_namepath}_Fy", optional_ctx=optional_ctx)
+            self._index_term(op.fx, optional_ctx=optional_ctx)
+            self._index_term(op.fy, optional_ctx=optional_ctx)
 
     # -- resolution ---------------------------------------------------------
 
@@ -194,17 +174,15 @@ class BudgetQuery:
         bare name instead. So resolution checks the dataset rather than
         predicting from the recipe alone:
 
-        1. ``"_".join(term.path)`` — the v1 primary name (the normal case);
-        2. ``term.explicit_var`` — a leaf's raw diagnostic. This is also what
-           makes a *legacy-filled* recipe resolve correctly: a legacy run writes
-           each node's legacy variable name into its ``var`` field, so rung 1
-           misses (v1 names are not in a legacy run's dataset) and this rung
-           finds the legacy name that is;
-        3. ``f"{base}_{op.kind}"`` — defensive. The current evaluator always
-           gives the bare name to *something* when it emits anything at all, so
-           rungs 1-2 are exhaustive today; this keeps resolution total if that
-           ever changes, rather than silently reporting a live variable as
-           missing.
+        1. ``"_".join(term.path)`` — the primary name (the normal case);
+        2. ``term.explicit_var`` — a leaf's raw diagnostic. Resolves a leaf term
+           to the diagnostic it names when the recipe has not been collected
+           into the dataset yet (before ``collect_budgets``, only the raw
+           diagnostics are present, not the derived primary names);
+        3. ``f"{base}_{op.kind}"`` — defensive. The evaluator always gives the
+           bare name to *something* when it emits anything at all, so rungs 1-2
+           are exhaustive today; this keeps resolution total if that ever
+           changes, rather than silently reporting a live variable as missing.
 
         Returns ``None`` when nothing materialized, so callers can drop the term
         rather than hand back a name that would ``KeyError`` on lookup.
@@ -240,13 +218,6 @@ class BudgetQuery:
 
     def _unknown(self, address):
         """Build the KeyError for an address that matched nothing."""
-        if address in self._legacy:
-            return KeyError(
-                f"{address!r} is a legacy (operator-infixed) variable name. The "
-                f"v1 equivalent is {self._legacy[address]!r}. Legacy names are "
-                f"only produced by collect_budgets(..., name_scheme='legacy'), "
-                f"which is deprecated."
-            )
         candidates = (
             list(self._by_name) + list(self._by_op_name) + list(self._diagnostics)
         )
@@ -257,13 +228,8 @@ class BudgetQuery:
     # -- public API ---------------------------------------------------------
 
     @property
-    def alias_map(self):
-        """Legacy variable name -> v1 variable name, for programmatic migration."""
-        return dict(self._legacy)
-
-    @property
     def duplicate_names(self):
-        """v1 names produced by more than one term path (should be empty).
+        """Names produced by more than one term path (should be empty).
 
         ``"_".join(path)`` is not injective, so two distinct terms *can* collide
         on one output name — in which case the second silently overwrites the
@@ -344,14 +310,13 @@ class BudgetQuery:
         Parameters
         ----------
         address : str or tuple
-            A v1 variable name (``"heat_lhs_advection"``) or a term path
+            A variable name (``"heat_lhs_advection"``) or a term path
             (``("heat", "lhs", "advection")``).
 
         Raises
         ------
         KeyError
-            If the address matches no term. Legacy operator-infixed names get an
-            error naming their v1 equivalent.
+            If the address matches no term, with a suggestion of close matches.
         """
         term = self._lookup(address)
         if term is not None:
@@ -370,7 +335,7 @@ class BudgetQuery:
         Parameters
         ----------
         address : str, tuple, or list
-            A v1 variable name, a term path, or a raw diagnostic name. A list
+            A variable name, a term path, or a raw diagnostic name. A list
             (or array) requests a batch and returns a list of results.
 
         Returns
@@ -653,7 +618,7 @@ class BudgetQuery:
     def __contains__(self, address):
         """True if ``address`` names something this recipe defines.
 
-        Mirrors what :meth:`var` accepts: a term (by v1 name or path), an
+        Mirrors what :meth:`var` accepts: a term (by name or path), an
         operation-suffixed name, or a raw diagnostic. ``_lookup`` *returns*
         ``None`` for an unrecognized string rather than raising -- only a bad
         path or type raises -- so testing for an exception alone reported every

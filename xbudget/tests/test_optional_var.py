@@ -5,8 +5,8 @@ A recipe only needs ``var`` when it is *naming* a diagnostic
 quantity carry no information — an absent key already means the same thing —
 so a recipe may omit them entirely.
 
-These tests pin that equivalence, on both engines, so the terse form stays
-supported rather than working by accident.
+These tests pin that equivalence so the terse form stays supported rather than
+working by accident.
 """
 import copy
 import warnings
@@ -100,29 +100,6 @@ def test_terse_queries_the_same(ds):
     assert qa.get_vars("heat_rhs") == qb.get_vars("heat_rhs")
 
 
-def test_terse_works_on_the_legacy_engine(ds):
-    """The deprecated engine must not KeyError on a recipe without placeholders."""
-    a, b = ds.copy(deep=True), ds.copy(deep=True)
-    _collect(a, VERBOSE, name_scheme="legacy")
-    _collect(b, TERSE, name_scheme="legacy")
-    assert set(a.data_vars) == set(b.data_vars)
-    assert "heat_rhs_sum_forcing" in b  # legacy names, from a terse recipe
-    xr.testing.assert_identical(a["heat_rhs_sum_forcing"], b["heat_rhs_sum_forcing"])
-
-
-def test_legacy_still_fills_a_terse_recipe(ds):
-    """Legacy mode adds the `var` keys it needs, rather than requiring them."""
-    recipe = copy.deepcopy(TERSE)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        xbudget.collect_budgets(ds, recipe, name_scheme="legacy")
-    assert recipe["heat"]["rhs"]["var"] == "heat_rhs"
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        agg = xbudget.aggregate(recipe)["heat"]["rhs"]
-    assert agg["forcing"] == "heat_rhs_sum_forcing"
-
-
 @pytest.mark.parametrize(
     "spelling", ["{var: null}", "{}"], ids=["var-null", "empty-dict"]
 )
@@ -143,14 +120,12 @@ def test_contentless_node_spellings_agree(ds, spelling):
     assert not [v for v in ds.data_vars if "xbudget_path" in ds[v].attrs]
 
 
-def test_legacy_decompose_of_an_unmaterialized_term(ds):
+def test_decompose_of_an_unmaterialized_term(ds):
     """Decomposing a term that never materialized, from a terse recipe.
 
-    `_disaggregate` used to subscript `v_dict["var"]`, which only worked because
-    `var: null` was always there to be read. With the placeholders gone the key
-    is simply absent for a term the engine never filled, and the old code raised
-    KeyError. The ECCO recipe hits this, but only the data-gated tests
-    exercise that -- hence this synthetic one, which runs in CI.
+    The unmaterialized `forcing` term (its diagnostic is absent) must drop out
+    of the aggregate rather than leak a partial entry, even with the `var: null`
+    placeholders omitted.
     """
     recipe = {
         "heat": {
@@ -164,11 +139,11 @@ def test_legacy_decompose_of_an_unmaterialized_term(ds):
     }
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        xbudget.collect_budgets(ds, recipe, name_scheme="legacy")
-        rhs = xbudget.aggregate(recipe, decompose=["forcing"])["heat"]["rhs"]
+        xbudget.collect_budgets(ds, recipe)
+        rhs = BudgetQuery(ds, recipe).aggregate(decompose=["forcing"])["heat"]["rhs"]
     # the unmaterialized term drops out; it must not leak the raw node dict
     assert "forcing" not in rhs
-    assert rhs == {"advection": "adv"}
+    assert rhs == {"advection": "heat_rhs_advection"}
 
 
 def test_bare_null_operand_is_also_dropped(ds):

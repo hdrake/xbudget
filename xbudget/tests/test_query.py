@@ -9,7 +9,6 @@ import os
 import warnings
 
 import pytest
-import xarray as xr
 import yaml
 
 import xbudget
@@ -167,14 +166,13 @@ def test_get_vars_unknown_raises_with_suggestion(collected):
     assert "tracer_rhs_diffusion" in str(exc.value)
 
 
-def test_get_vars_legacy_name_raises_with_v1_equivalent(collected):
-    """Legacy operator-infixed names are rejected, but helpfully."""
+def test_get_vars_operator_infixed_name_raises_with_suggestion(collected):
+    """An operator-infixed name (not produced by the engine) is rejected."""
     _, q = collected
     with pytest.raises(KeyError) as exc:
         q.get_vars("tracer_rhs_sum_diffusion")
-    msg = str(exc.value)
-    assert "legacy" in msg
-    assert "tracer_rhs_diffusion" in msg
+    # the close-match hint points at the real name
+    assert "tracer_rhs_diffusion" in str(exc.value)
 
 
 # -- aggregate --------------------------------------------------------------
@@ -203,7 +201,7 @@ def test_aggregate_decompose_str_equals_single_item_list(collected):
 
 
 def test_aggregate_decompose_matches_exactly_not_substring(collected):
-    """Legacy `k not in decompose` on a string substring-matched; v1 does not."""
+    """`decompose` matches a term name exactly, not as a substring."""
     _, q = collected
     assert q.aggregate(decompose="boundary_and_more") == q.aggregate()
 
@@ -360,54 +358,6 @@ def test_shipped_recipes_declare_expected_metadata(path):
     assert q.thickness() == "thkcello"
     for name in q.budgets:
         assert q.lambda_var(name) is not None, f"{name} declares no `lambda`"
-
-
-# -- both engines -----------------------------------------------------------
-
-
-def test_query_resolves_legacy_filled_dict(synthetic_grid, synthetic_preset):
-    """The same query layer reads a legacy run's output.
-
-    A legacy run writes each node's legacy variable name into the recipe's `var`
-    fields, so the v1 names are absent from the dataset and the `explicit_var`
-    rung resolves to the legacy names that are present.
-    """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        xbudget.collect_budgets(synthetic_grid, synthetic_preset, name_scheme="legacy")
-    q = BudgetQuery(synthetic_grid, synthetic_preset)
-
-    rhs = q.aggregate()["tracer"]["rhs"]
-    assert rhs["diffusion"] == "tracer_rhs_sum_diffusion"  # a legacy name
-    for var in rhs.values():
-        assert var in synthetic_grid._ds
-
-
-def test_aggregate_matches_legacy_data(synthetic_grid_builder, synthetic_preset):
-    """v1 aggregate and legacy aggregate name the same terms and same arrays.
-
-    The names differ (that is the point of v1); the data behind them must not.
-    """
-    legacy_preset = copy.deepcopy(synthetic_preset)
-    legacy_grid = synthetic_grid_builder()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        xbudget.collect_budgets(legacy_grid, legacy_preset, name_scheme="legacy")
-        legacy_agg = xbudget.aggregate(legacy_preset)
-
-    new_grid = synthetic_grid_builder()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        xbudget.collect_budgets(new_grid, synthetic_preset)
-    new_agg = BudgetQuery(new_grid, synthetic_preset).aggregate()
-
-    legacy_rhs = legacy_agg["tracer"]["rhs"]
-    new_rhs = new_agg["tracer"]["rhs"]
-    assert set(legacy_rhs) == set(new_rhs)
-    for label, new_name in new_rhs.items():
-        xr.testing.assert_allclose(
-            new_grid._ds[new_name], legacy_grid._ds[legacy_rhs[label]], check_dim_order=False
-        )
 
 
 # -- recipes ------------------------------------------------------------

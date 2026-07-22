@@ -2,14 +2,15 @@
 
 The evaluator walks the :mod:`xbudget.nodes` tree and materializes one output
 variable per *operation* (a ``sum``/``product``/``difference``), naming it by
-its structured path with the operator infixes dropped (see ``_new_name``). This
-collapses the legacy engine's duplicate "copy" variables while preserving the
-numerical results.
+its structured path with the operator infixes dropped (see ``_new_name``). A
+term with more than one operation emits one variable each; the first
+sum/product operation (or a lone operation) claims the bare path name, and any
+siblings are suffixed with their operator kind.
 
 It is intentionally side-effecting in one place only: it writes the derived
 variables into the dataset. It never mutates the recipe (the typed tree is
-immutable). Alongside the new variables it records a legacy->new name map so
-callers can offer backward-compatible names and a migration table.
+immutable). It returns a ``records`` map (new variable name -> its path and
+operation) describing what it built.
 
 Missing diagnostics
 -------------------
@@ -28,12 +29,11 @@ attributes). A term (or subtree) declared ``optional`` in the recipe is exempt
 from all three — its absence is expected, so it is dropped with no warning, no
 error, and no ``incomplete`` flag on its parent.
 
-Behavior change from the legacy engine: a ``product`` with a *missing* required
-factor is now dropped (the term does not materialize) instead of multiplying in
-``0.0`` and emitting an identically-zero variable. An unknown factor is not the
-same as a zero one; a fabricated zero reads as a real (null) contribution to
-whatever consumes it. A ``sum`` still drops only the missing operand and builds
-from the rest, flagged incomplete.
+A ``product`` with a *missing* required factor is dropped (the term does not
+materialize) rather than multiplying in ``0.0`` and emitting an identically-zero
+variable. An unknown factor is not the same as a zero one; a fabricated zero
+reads as a real (null) contribution to whatever consumes it. A ``sum`` still
+drops only the missing operand and builds from the rest, flagged incomplete.
 """
 import warnings
 from functools import reduce
@@ -92,10 +92,7 @@ class _Evaluator:
             self.ds = data
         self.allow_rechunk = allow_rechunk
         self.on_missing = on_missing
-        # legacy variable name -> new variable name (covers both the legacy
-        # "actual" operator-suffixed names and the plain "copy" names).
-        self.alias_map = {}
-        # new variable name -> {"path", "op", "legacy_actual", "legacy_copy"}
+        # new variable name -> {"path", "op"}
         self.records = {}
         # Missing-diagnostic bookkeeping, drained once at the end of run().
         # Only *required* (non-optional) misses land here.
@@ -104,10 +101,10 @@ class _Evaluator:
 
     def run(self, budgets):
         for budget in budgets.values():
-            for side, term in budget.sides.items():
-                self._eval_term(term, f"{budget.name}_{side}")
+            for term in budget.sides.values():
+                self._eval_term(term)
         self._finish()
-        return self.alias_map, self.records
+        return self.records
 
     # -- missing-diagnostic reporting ---------------------------------------
 
@@ -156,14 +153,12 @@ class _Evaluator:
 
     # -- term ---------------------------------------------------------------
 
-    def _eval_term(self, term, legacy_namepath, optional_ctx=False):
+    def _eval_term(self, term, optional_ctx=False):
         """Evaluate a term; emit a variable per operation; return primary value.
 
-        ``legacy_namepath`` is the variable name the previous engine would have
-        used for this term (operator infixes included via the parents), used to
-        build the backward-compatibility alias map. ``optional_ctx`` is ``True``
-        when an ancestor (or this term) is declared ``optional``, in which case
-        missing diagnostics anywhere in this subtree are expected and silent.
+        ``optional_ctx`` is ``True`` when an ancestor (or this term) is declared
+        ``optional``, in which case missing diagnostics anywhere in this subtree
+        are expected and silent.
         """
         opt = optional_ctx or term.optional
         base = _new_name(term.path)
@@ -172,8 +167,8 @@ class _Evaluator:
         first_emitted = True
 
         # Leaf term: ``var`` references an existing diagnostic directly (e.g.
-        # ``{"var": "advective_tendency"}``). The legacy engine aliased it to the
-        # term's name; we do the same and treat it as the term's primary value.
+        # ``{"var": "advective_tendency"}``). Aliased to the term's name and
+        # treated as the term's primary value.
         if isinstance(term.explicit_var, str):
             if term.explicit_var in self.ds:
                 out = self.ds[term.explicit_var].rename(base).copy()
@@ -181,12 +176,7 @@ class _Evaluator:
                 out.attrs["xbudget_path"] = list(term.path)
                 out.attrs["xbudget_op"] = "var"
                 self.ds[base] = out
-                self.alias_map[legacy_namepath] = base
-                self.records[base] = {
-                    "path": list(term.path),
-                    "op": "var",
-                    "legacy_actual": legacy_namepath,
-                }
+                self.records[base] = {"path": list(term.path), "op": "var"}
                 primary = out
                 first_emitted = False
             else:
@@ -196,17 +186,14 @@ class _Evaluator:
 
         evaluated = []  # (op, value, provenance, opmeta) for producing operations
         for op in term.operations:
-            value, provenance, opmeta = self._eval_op(
-                op, term, legacy_namepath, opt
-            )
+            value, provenance, opmeta = self._eval_op(op, term, opt)
             if value is not None:
                 evaluated.append((op, value, provenance, opmeta))
 
         # Choose which operation gets the bare path name (the term's primary
-        # value). The legacy engine reserved the plain namepath ("copy") for the
-        # first sum/product term, so prefer that; a lone difference takes the
-        # bare name (with no legacy copy). A leaf var, if present, already claimed
-        # it above (first_emitted is False), so no operation does.
+        # value): the first sum/product, else the first operation of any kind. A
+        # leaf var, if present, already claimed it above (first_emitted is
+        # False), so no operation does.
         primary_idx = None
         if first_emitted:
             for i, (op, _v, _p, _m) in enumerate(evaluated):
@@ -219,7 +206,6 @@ class _Evaluator:
         for i, (op, value, provenance, opmeta) in enumerate(evaluated):
             is_primary = i == primary_idx
             new_name = base if is_primary else f"{base}_{op.kind}"
-            legacy_actual = f"{legacy_namepath}_{op.kind}"
 
             out = value.rename(new_name)
             # Set a fresh attrs dict rather than mutate whatever xarray
@@ -233,19 +219,8 @@ class _Evaluator:
             }
             self._stamp_incompleteness(out, opmeta, opt)
             self.ds[new_name] = out
-
-            self.alias_map[legacy_actual] = new_name
-            self.records[new_name] = {
-                "path": list(term.path),
-                "op": op.kind,
-                "legacy_actual": legacy_actual,
-            }
+            self.records[new_name] = {"path": list(term.path), "op": op.kind}
             if is_primary:
-                # The legacy engine also emitted a plain "copy" at the namepath
-                # for every operation except a lone difference.
-                if op.kind != "difference":
-                    self.alias_map[legacy_namepath] = new_name
-                    self.records[new_name]["legacy_copy"] = legacy_namepath
                 primary = out
 
         return primary
@@ -272,15 +247,15 @@ class _Evaluator:
 
     # -- operations ---------------------------------------------------------
 
-    def _eval_op(self, op, term, legacy_namepath, opt):
+    def _eval_op(self, op, term, opt):
         if isinstance(op, (Sum, Product)):
-            return self._eval_nary(op, term, legacy_namepath, opt)
+            return self._eval_nary(op, term, opt)
         if isinstance(op, Difference):
-            return self._eval_difference(op, term, legacy_namepath, opt)
+            return self._eval_difference(op, term, opt)
         if isinstance(op, Reciprocal):
             return self._eval_reciprocal(op, term, opt)
         if isinstance(op, LateralDivergence):
-            return self._eval_lateral_divergence(op, term, legacy_namepath, opt)
+            return self._eval_lateral_divergence(op, term, opt)
         raise TypeError(f"Unknown operation type {type(op).__name__}")
 
     def _eval_reciprocal(self, op, term, opt):
@@ -291,9 +266,9 @@ class _Evaluator:
         var = 1.0 / xr.where(ds[op.source] == 0, np.inf, ds[op.source])
         return var, op.source, {"missing": [], "incomplete": False}
 
-    def _eval_lateral_divergence(self, op, term, legacy_namepath, opt):
-        fx = self._eval_term(op.fx, f"{legacy_namepath}_Fx", optional_ctx=opt)
-        fy = self._eval_term(op.fy, f"{legacy_namepath}_Fy", optional_ctx=opt)
+    def _eval_lateral_divergence(self, op, term, opt):
+        fx = self._eval_term(op.fx, optional_ctx=opt)
+        fy = self._eval_term(op.fy, optional_ctx=opt)
         if fx is None or fy is None:
             # The flux sub-terms already recorded whatever diagnostic they were
             # missing; a divergence of an absent flux is simply not built.
@@ -304,7 +279,7 @@ class _Evaluator:
         )
         return var, [fx.name, fy.name], {"missing": [], "incomplete": incomplete}
 
-    def _eval_nary(self, op, term, legacy_namepath, opt):
+    def _eval_nary(self, op, term, opt):
         ds = self.ds
         op_list = []
         missing = []       # labels/names of operands dropped at this node
@@ -314,11 +289,7 @@ class _Evaluator:
             operand_optional = opt
             if isinstance(operand, Term):
                 operand_optional = opt or operand.optional
-                child = self._eval_term(
-                    operand,
-                    f"{legacy_namepath}_{op.kind}_{name}",
-                    optional_ctx=operand_optional,
-                )
+                child = self._eval_term(operand, optional_ctx=operand_optional)
                 if child is not None:
                     value = child
                     if child.attrs.get("xbudget_incomplete"):
@@ -351,16 +322,16 @@ class _Evaluator:
         if len(op_list) == 0:
             return None, None, None
         if op.kind == "sum":
-            _warn_if_summands_broadcast(op_list, legacy_namepath)
+            _warn_if_summands_broadcast(op_list, _new_name(term.path))
         var = sum(op_list) if op.kind == "sum" else reduce(mul, op_list, 1)
         if not isinstance(var, xr.DataArray):
-            # Reduced to a pure scalar (e.g. all variable operands missing);
-            # the legacy engine emitted no variable in this case.
+            # Reduced to a pure scalar (e.g. all variable operands missing); no
+            # variable is emitted in this case.
             return None, None, None
         provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
         return var, provenance, {"missing": missing, "incomplete": incomplete}
 
-    def _eval_difference(self, op, term, legacy_namepath, opt):
+    def _eval_difference(self, op, term, opt):
         if self.grid is None:
             raise ValueError(
                 "Input `data` must be an `xgcm.Grid` instance when using "
@@ -376,11 +347,7 @@ class _Evaluator:
             source = ds[operand.name]
             provenance = operand.name
         else:  # a computed sub-term, differenced after evaluation
-            source = self._eval_term(
-                operand,
-                f"{legacy_namepath}_difference_{operand.name}",
-                optional_ctx=opt,
-            )
+            source = self._eval_term(operand, optional_ctx=opt)
             if source is None:
                 return None, None, None
             provenance = source.name
@@ -444,7 +411,7 @@ class _Evaluator:
 
 
 def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
-    """Evaluate parsed budgets into ``data``; return ``(alias_map, records)``.
+    """Evaluate parsed budgets into ``data``; return ``records``.
 
     Parameters
     ----------
@@ -465,10 +432,8 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
 
     Returns
     -------
-    alias_map : dict
-        Legacy variable name -> new variable name.
     records : dict
-        New variable name -> metadata ({path, op, legacy_actual, legacy_copy}).
+        New variable name -> metadata (``{"path": [...], "op": kind}``).
     """
     return _Evaluator(
         data, allow_rechunk=allow_rechunk, on_missing=on_missing

@@ -272,10 +272,9 @@ disk. Key order is preserved rather than alphabetized, because order is
 meaningful: operands come back from `get_vars` in the order you wrote them.
 
 ```{note}
-The round-trip is clean because `collect_budgets` does not modify your recipe.
-The deprecated `name_scheme="legacy"` does: it fills every `var` field in place
-with that run's variable names, so saving a recipe afterwards would pin it to
-one particular run. Another reason to leave `name_scheme` alone.
+The round-trip is clean because `collect_budgets` never modifies your recipe —
+it only adds derived variables to the dataset. So you can save a recipe at any
+point and get back exactly what you wrote.
 ```
 
 ## When something is wrong

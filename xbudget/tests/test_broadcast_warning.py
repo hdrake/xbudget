@@ -1,7 +1,7 @@
 """Regression tests for issue #11: summing a 2D surface flux with a 3D flux
 convergence silently broadcasts the surface flux over every vertical level.
 
-Both engines should now emit a ``UserWarning`` when a ``sum`` mixes operands of
+The engine now emits a ``UserWarning`` when a ``sum`` mixes operands of
 differing dimensionality, so the wrong finite-volume broadcast is at least
 loud rather than silent. A well-formed budget whose summands all share the same
 dimensions must stay quiet.
@@ -74,20 +74,15 @@ def test_helper_quiet_on_matching_dims_and_scalars():
         _warn_if_summands_broadcast([a], "lone_term")
 
 
-# -- end to end through both engines ----------------------------------------
+# -- end to end -------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name_scheme", ["v1", "legacy"])
-@pytest.mark.filterwarnings("ignore::FutureWarning")
-def test_mixed_rank_sum_warns(name_scheme):
+def test_mixed_rank_sum_warns():
     grid = _mixed_rank_grid()
     with pytest.warns(UserWarning, match="mismatched dimensions"):
-        xbudget.collect_budgets(
-            grid, copy.deepcopy(MIXED_RANK_PRESET), name_scheme=name_scheme
-        )
+        xbudget.collect_budgets(grid, copy.deepcopy(MIXED_RANK_PRESET))
 
 
-@pytest.mark.filterwarnings("ignore::FutureWarning")
 def test_wellformed_sum_is_quiet(synthetic_grid):
     """The all-2D synthetic preset must not trip the broadcast warning."""
     with warnings.catch_warnings(record=True) as record:
