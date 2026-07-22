@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
       - name: Cancel previous runs
@@ -48,3 +48,44 @@ jobs:
       - name: Test with pytest
         run: |
           pytest
+
+  docs:
+    # Read the Docs builds the hosted PR preview; this build is the pre-merge
+    # gate. It runs on fork PRs (where RTD may not), and its artifact lets you
+    # look at the rendered pages without waiting on RTD.
+    name: docs
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Conda setup
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          channels: conda-forge
+          activate-environment: docs_env_xbudget
+          auto-activate-base: false
+
+      - name: Set up conda environment
+        # `conda`, not `mamba`: setup-miniconda already selects the libmamba
+        # solver, so this resolves just as fast without installing mamba first.
+        run: |
+          conda env update -f docs/environment.yml
+          python -m pip install -e .
+
+      - name: Build docs
+        # Mirrors .readthedocs.yaml: html builder, fail_on_warning. --keep-going
+        # reports every warning instead of stopping at the first.
+        run: |
+          python -m sphinx -b html -W --keep-going docs/source docs/build/html
+
+      - name: Upload rendered docs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: docs-html
+          path: docs/build/html

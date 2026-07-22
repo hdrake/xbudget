@@ -3,58 +3,36 @@ mass: # finite-volume mass budget in units of kg/s
   lambda: "density"
   thickness: "thkcello"
   lhs:
-    var: null
     sum:
-      var: null
       Eulerian_tendency:
-        var: null
         product:
-          var: null
           thickness_tendency: null
           density: 1035.
           area: "areacello"
   rhs:
-    var: null
     sum:
-      var: null
       advection:
-        var: null
         sum:
-          var: null
           lateral:
-            var: null
             sum:
-              var: null
               zonal_convergence:
-                var: null
                 product:
-                  var: null
                   zonal_divergence:
-                    var: null
                     difference:
-                      var: null
                       zonal_mass_transport: "umo"
                   sign: -1.
               meridional_convergence:
-                var: null
                 product:
-                  var: null
                   meridional_divergence:
-                    var: null
                     difference:
-                      var: null
                       meridional_mass_transport: "vmo"
           interfacial:
-            var: null
             product:
-              var: null
               thickness_tendency: "vert_remap_h_tendency"
               density: 1035.
               area: "areacello"
       surface_exchange_flux:
-        var: null
         product:
-          var: null
           thickness_tendency: "boundary_forcing_h_tendency"
           density: 1035.
           area: "areacello"
@@ -63,37 +41,25 @@ heat: # finite-volume heat budget in units of J/s
   lambda: "thetao"
   surface_lambda: "tos"
   lhs:
-    var: null
     sum:
-      var: null
       Eulerian_tendency:
-        var: null
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "opottemptend"
           area: "areacello"
       advection:
-        var: null
         sum:
-          var: null
           lateral:
-            var: null
             product:
-              var: null
               sign: -1.
               tracer_content_tendency_per_unit_area: "T_advection_xy"
               area: "areacello"
           interfacial:
-            var: null
             product:
-              var: null
               sign: -1.
               tracer_content_tendency_per_unit_area: "Th_tendency_vert_remap"
               area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
-        var: null
         product:
-          var: null
           sign: -1.
           specific_heat_capacity: 3992.
           lambda_mass: "tos"
@@ -101,36 +67,24 @@ heat: # finite-volume heat budget in units of J/s
           density: 1035.
           area: "areacello"
   rhs:
-    var: null
     sum:
-      var: null
       diffusion:
-        var: null
         sum:
-          var: null
           lateral:
-            var: null
             product:
-              var: null
               tracer_content_tendency_per_unit_area: "opottemppmdiff"
               area: "areacello"
           interfacial:
-            var: null
             product:
-              var: null
               tracer_content_tendency_per_unit_area: "opottempdiff"
               area: "areacello"
             
       surface_exchange_flux:
-        var: null
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "boundary_forcing_heat_tendency"
           area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
-        var: null
         product:
-          var: null
           sign: -1.
           specific_heat_capacity: 3992.
           lambda_mass: "tos"
@@ -138,15 +92,11 @@ heat: # finite-volume heat budget in units of J/s
           density: 1035.
           area: "areacello"
       bottom_flux:
-        var: null
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "internal_heat_heat_tendency"
           area: "areacello"
       frazil_ice:
-        var: null
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "frazil_heat_tendency"
           area: "areacello"
 
@@ -154,37 +104,25 @@ salt: # finite-volume salt budget in units of kg/s
   lambda: "so"
   surface_lambda: "sos"
   lhs:
-    var: null
     sum:
-      var: null
       Eulerian_tendency:
-        var: null
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "osalttend"
           area: "areacello"
       advection:
-        var: null
         sum:
-          var: null
           lateral:
-            var: null
             product:
-              var: null
               sign: -1.
               tracer_content_tendency_per_unit_area: "S_advection_xy"
               area: "areacello"
           interfacial:
-            var: null
             product:
-              var: null
               sign: -1.
               tracer_content_tendency_per_unit_area: "Sh_tendency_vert_remap"
               area: "areacello"
       surface_ocean_flux_advective_negative_lhs:
-        var: null
         product:
-          var: null
           sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"
@@ -193,35 +131,23 @@ salt: # finite-volume salt budget in units of kg/s
           area: "areacello"
       
   rhs:
-    var: null
     sum:
-      var: null
       diffusion:
-        var: null
         sum:
-          var: null
           lateral:
-            var: null
             product:
-              var: null
               tracer_content_tendency_per_unit_area: "osaltpmdiff"
               area: "areacello"
           interfacial:
-            var: null
             product:
-              var: null
               tracer_content_tendency_per_unit_area: "osaltdiff"
               area: "areacello"
       surface_exchange_flux:
-        var:
         product:
-          var: null
           tracer_content_tendency_per_unit_area: "boundary_forcing_salt_tendency"
           area: "areacello"
       surface_ocean_flux_advective_negative_rhs:
-        var: null
         product:
-          var: null
           sign: -1.
           unit_conversion: 0.001
           lambda_mass: "sos"

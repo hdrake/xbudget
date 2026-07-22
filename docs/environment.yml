@@ -4,13 +4,17 @@ channels:
 dependencies:
   - python=3.12
   - cftime
+  - dask
   - ipython
   - jupyterlab
   - matplotlib
+  - myst-parser
   - netcdf4
+  - pandoc  # nbsphinx needs it to convert the notebooks
   - pydap
   - pytest
   - sphinx
   - nbsphinx
   - ipykernel
+  - xgcm>=0.10.0
   - pip
