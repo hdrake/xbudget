@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Packaging
+
+- `pyyaml` is now declared as a dependency. It is imported at package import
+  time by `xbudget/presets.py` but was previously satisfied only transitively
+  (via `dask`), so a minimal environment could install xbudget and fail on
+  `import xbudget`.
+- Removed `conda/meta.yaml`. The [conda-forge feedstock][feedstock] is the
+  source of truth for the conda package; the in-repo copy had no consumer and
+  drifted from it.
+- Added `ci/check_conda_parity.py`, run weekly and whenever `pyproject.toml`
+  changes, which fails if the feedstock's run requirements disagree with
+  `pyproject.toml`. The autotick bot syncs a release's version and hash but
+  never its dependencies.
+
+[feedstock]: https://github.com/conda-forge/xbudget-feedstock
+
 ## 0.7.0 — typed engine + new query API (breaking)
 
 This release replaces the recursive dict-walking engine with a typed expression

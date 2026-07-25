@@ -1,0 +1,49 @@
+name: conda parity
+
+# The conda-forge autotick bot syncs the version and sha256 of the feedstock
+# recipe, but never its dependency lists -- so a pin bumped here can sit stale
+# on conda-forge indefinitely. This compares the two.
+#
+# The feedstock always lags a release (its version PR is opened after the sdist
+# lands on PyPI), so a failure just after tagging usually clears itself when
+# that PR merges.
+
+on:
+  # Catches drift introduced on the feedstock side, or by a release whose
+  # follow-up feedstock PR was never merged.
+  schedule:
+    - cron: "17 6 * * 1"
+  # Catches drift at the moment dependencies change here.
+  pull_request:
+    paths:
+      - pyproject.toml
+      - ci/check_conda_parity.py
+      - .github/workflows/conda-parity.yml
+  push:
+    branches:
+      - main
+    paths:
+      - pyproject.toml
+      - ci/check_conda_parity.py
+      - .github/workflows/conda-parity.yml
+  workflow_dispatch:
+
+jobs:
+  parity:
+    name: recipe vs pyproject
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python -m pip install pyyaml
+
+      - name: Compare recipe run requirements with pyproject.toml
+        run: python ci/check_conda_parity.py
