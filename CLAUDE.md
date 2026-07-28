@@ -86,6 +86,18 @@ recipe ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets
 - Docs (`docs/`) are Sphinx + Furo with `myst_nb`, which renders both the `.md` pages and the `examples/*.ipynb` notebooks (copied into `docs/examples/` at build time by a hook in `conf.py`). Notebooks are **not** executed at build time (`nb_execution_mode = "off"`); their committed outputs are rendered as-is. `quickstart.md` and `recipes.md` are hand-written. Build locally exactly as CI does: `python -m sphinx -b html -W --keep-going docs docs/_build/html`. `-W` mirrors `.readthedocs.yaml`'s `fail_on_warning: true` — a broken cross-reference fails the build.
 - Docs are built three ways, deliberately: the `docs` job in `ci.yml` (pre-merge gate, uploads the rendered HTML as a `docs-html` artifact), Read the Docs PR builds (the hosted preview link on the PR), and RTD `latest` on merge. If you change the Sphinx config, keep the CI command and `.readthedocs.yaml` in agreement.
 
+## Versioning
+
+**The git tag is the single source of truth.** `hatch-vcs` (`[tool.hatch.version] source = "vcs"`) derives the version from the tag at build time and writes it to `xbudget/_version.py`, which is **gitignored** — there is no version string in the source tree. `xbudget/version.py` is a thin shim that imports from it, with a `0.0.0+unknown` fallback for an un-built checkout.
+
+Consequences worth remembering when editing:
+
+- **Never add a version literal back to the tree**, and never "fix" a `0.0.0+unknown` by hardcoding one — it means the package was imported without being built or installed.
+- **Any CI job that installs the package needs `fetch-depth: 0`.** A shallow clone cannot see the tag, so hatch-vcs silently resolves a `0.1.devN` version instead of failing. Both checkouts in `ci.yml` and the one in `publish-to-pypi.yml` set it, and `.readthedocs.yaml` unshallows in `post_checkout` for the same reason.
+- `_version.py` **is** shipped inside the sdist, so building from the sdist (as conda-forge does) works with no git present. Do not add it to `[tool.hatch.build] exclude`.
+- The conda-forge feedstock builds with `--no-build-isolation`, so its `host` requirements must list `hatch-vcs` next to `hatchling`. `ci/check_conda_parity.py` compares only *run* requirements, so it will not catch that.
+- Releasing is just publishing a GitHub Release tagged `vX.Y.Z`; there is no bump commit. See "Releasing" in `README.md`.
+
 ## Pull request workflow
 
 When you push a new commit to a branch that already has an open pull request, update the PR description (the top comment / body) so it stays consistent with the latest commit — don't leave it describing only the original state:
