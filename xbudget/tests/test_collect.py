@@ -159,3 +159,20 @@ class TestLateralDivergenceRechunking:
         # Not left as the single chunk the divergence was computed under.
         assert dict(zip(out.dims, out.chunks))["x_c"] == (2, 2)
         assert dict(zip(out.dims, out.chunks))["y_c"] == (2, 2)
+
+    def test_unchunked_data_stays_eager(self):
+        # An in-memory array is already one chunk along everything, so the
+        # rechunk is a no-op -- and must not hand back a lazy result where the
+        # caller passed an eager one.
+        assert self._run(None).chunks is None
+
+    def test_divergence_without_grid_raises_value_error(self):
+        # Mirrors the `difference` guard above. The grid is needed for the
+        # rechunking bookkeeping too, so this has to fire before that runs --
+        # otherwise it surfaces as an AttributeError on None.
+        ds = xr.Dataset({
+            "u": xr.DataArray(np.random.rand(4, 4), dims=("x", "y")),
+            "v": xr.DataArray(np.random.rand(4, 4), dims=("x", "y")),
+        })
+        with pytest.raises(ValueError, match="xgcm.Grid"):
+            collect_budgets(ds, DIVERGENCE_RECIPE)

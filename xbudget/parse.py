@@ -26,6 +26,12 @@ SIDES = ("lhs", "rhs")
 #: Top-level recipe key holding the shared constant table (not a budget).
 CONSTANTS_KEY = "constants"
 
+#: Budget-level metadata keys. The engine does not interpret these, but seeing
+#: one on a *term* is a specific, recognizable mistake worth its own message.
+BUDGET_METADATA_KEYS = frozenset(
+    {"units", "lambda", "surface_lambda", "thickness", "bolus"}
+)
+
 
 class BudgetParseError(ValueError):
     """Raised when an xbudget recipe does not match the expected schema."""
@@ -111,6 +117,15 @@ def _parse_constants(block):
             f"Top-level '{CONSTANTS_KEY}' must be a dict of "
             f"name -> number or {{value:, units:}}, got {type(block).__name__}."
         )
+    if block.keys() & set(SIDES):
+        # `constants` is reserved, so a budget of that name is unreachable. Say
+        # so, rather than failing later with a confusing complaint about `lhs`
+        # not being a valid constant.
+        raise BudgetParseError(
+            f"Top-level '{CONSTANTS_KEY}' is reserved for the shared constant "
+            f"table and cannot be a budget (it has {sorted(block.keys() & set(SIDES))}). "
+            f"Rename the budget."
+        )
     consts = {}
     for name, spec in block.items():
         path = (CONSTANTS_KEY, name)
@@ -154,6 +169,17 @@ def _parse_term(node, path, name, consts):
                 operations.append(op)
         elif key in SPECIAL_OPS:
             operations.append(_parse_lateral_divergence(value, path, consts))
+        elif key in BUDGET_METADATA_KEYS:
+            # A budget-level key written on a term. Guessing "you forgot a
+            # `product:`" here would be actively misleading — `units: "W"` on a
+            # term is a different mistake with a different fix.
+            warnings.warn(
+                f"Ignoring '{key}' on term at {_fmt(path)}: '{key}' is "
+                f"budget-level metadata (declare it beside the budget's "
+                f"'lhs'/'rhs'), not a term key. A term's units are inferred "
+                f"from its inputs, never declared.",
+                UserWarning,
+            )
         else:
             # Tolerate keys that are neither `var` nor an operation (e.g. a
             # `sign`/`density` scalar left directly on a term because its
@@ -225,6 +251,13 @@ def _parse_operand(value, path, name, consts):
 
 def _parse_constant(body, path, name):
     """Parse a ``{value:, units:}`` constant (units default to dimensionless)."""
+    if "value" not in body:
+        # Reachable from the `constants` table, which routes every mapping here
+        # (an inline constant is only recognized *because* it has a `value`).
+        raise BudgetParseError(
+            f"Constant '{name}' at {_fmt(path)} has no 'value'; expected "
+            f"a number or a {{value:, units:}} mapping, got keys {sorted(body)}."
+        )
     value = body["value"]
     if isinstance(value, bool) or not isinstance(value, numbers.Number):
         raise BudgetParseError(

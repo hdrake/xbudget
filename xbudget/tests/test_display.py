@@ -113,6 +113,45 @@ class TestUnitsAnnotation:
         stamped = grid._ds["tracer_rhs_diffusion"].attrs["units"]
         assert f'<span class="xbdg-units">[{stamped}]</span>' in h
 
+    def test_reciprocal_operand_is_annotated_in_both_renderers(self):
+        # The HTML tree is the one users actually see in a notebook; it was the
+        # one leaf the units annotation missed.
+        import numpy as np
+        import xarray as xr
+
+        ds = xr.Dataset({
+            "dt": xr.DataArray(np.ones(3), dims=("t",), attrs={"units": "s"}),
+        })
+        view = show_recipe({"b": {"rhs": {"reciprocal": {"dt": {"var": "dt"}}}}},
+                           None, ds)
+        assert "of: dt [s]" in repr(view)
+        html = view._repr_html_()
+        assert '>dt</span><span class="xbdg-units">[s]</span>' in html
+
+    def test_a_gap_does_not_blank_the_units_above_it(self, synthetic_grid):
+        # One absent diagnostic used to leave every term above it unannotated --
+        # including the budget roots, which are the ones worth reading. The
+        # evaluator builds the root from the operands that remain, so the display
+        # should say what it will come out in.
+        grid = self._with_units(synthetic_grid)
+        recipe = {"tracer": {"units": "kg s-1", "rhs": {"sum": {
+            "diffusion": {"product": {"d": "diag_a", "area": "area"}},
+            "absent": {"product": {"d": "not_present", "area": "area"}},
+        }}}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe)
+        stamped = grid._ds["tracer_rhs"].attrs["units"]
+        root_line = repr(show_recipe(recipe, "tracer", grid)).splitlines()[2]
+        assert f"[{stamped}]" in root_line
+        # The term that will never be built is still, correctly, unannotated:
+        # its line ends at the operator badge, with no units after it.
+        absent_line = next(
+            l for l in repr(show_recipe(recipe, "tracer", grid)).splitlines()
+            if "absent" in l
+        )
+        assert absent_line.endswith("absent [×]")
+
     def test_query_repr_annotates_before_collecting(self, preset, synthetic_grid):
         # Nothing has been materialized, so there is no stamped attribute to
         # read; the display falls back to inferring from the recipe + dataset.

@@ -186,6 +186,37 @@ class TestSharedConstants:
         with pytest.raises(BudgetParseError, match="must be a dict"):
             parse_budgets({"constants": [1, 2, 3]})
 
+    def test_constant_entry_needs_a_value(self):
+        # The table routes every mapping to the constant parser (unlike an inline
+        # constant, which is only recognized *because* it has a `value`), so a
+        # typo'd key must be a parse error rather than a bare KeyError.
+        with pytest.raises(BudgetParseError, match="no 'value'"):
+            parse_budgets({"constants": {"rho": {"val": 1035.0, "units": "kg m-3"}}})
+
+    def test_a_budget_may_not_be_named_constants(self):
+        recipe = {"constants": {"lhs": {"sum": {"t": {"var": "x"}}}}}
+        with pytest.raises(BudgetParseError, match="reserved"):
+            parse_budgets(recipe)
+
+    def test_a_constant_shadows_a_dataset_variable_of_the_same_name(self):
+        # The documented rule: a string operand resolves against the table first.
+        # Pin it, because the failure mode is silent (the wrong number is used).
+        grid = build_synthetic_grid()
+        grid._ds["diag_a"].attrs["units"] = "m s-1"
+        grid._ds["area"].attrs["units"] = "m2"
+        recipe = {
+            "constants": {"area": {"value": 2.0, "units": "m2"}},
+            "mass": {"rhs": {"product": {"d": "diag_a", "area": "area"}}},
+        }
+        prod = parse_budgets(recipe)["mass"].sides["rhs"].operations[0]
+        assert dict(prod.terms)["area"] == Constant(2.0, units="m2")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe)
+        # The scalar 2.0 was used, not the `area` variable in the dataset.
+        expected = grid._ds["diag_a"] * 2.0
+        assert float(abs(grid._ds["mass_rhs"] - expected).max()) == 0.0
+
     def test_constant_entry_must_be_numeric_or_mapping(self):
         with pytest.raises(BudgetParseError, match="must be a number"):
             parse_budgets({"constants": {"rho": "1035 kg m-3"}})
@@ -268,6 +299,102 @@ class TestInferUnits:
         assert U.convertible(U.infer_units(leaf, lookup), _u("kg s-1"))
 
 
+# Recipes whose root the evaluator still builds even though part of it is
+# absent, which is where the recipe-as-written and the run-as-executed answers
+# diverge -- exactly what `available` exists to reconcile.
+GAPPY = {
+    "sum drops a missing operand": {
+        "sum": {"a": {"var": "diag_a"},
+                "gone": {"product": {"d": "not_present"}}},
+    },
+    "optional subtree is absent": {
+        "sum": {"a": {"var": "diag_a"},
+                "opt": {"optional": True, "product": {"d": "not_present"}}},
+    },
+    "multi-op term whose first op is skipped": {
+        "sum": {"t": {"product": {"d": "not_present"},
+                      "sum": {"a": {"var": "diag_a"}}}},
+    },
+    "leaf var absent, sibling op survives": {
+        "sum": {"t": {"var": "not_present", "sum": {"a": {"var": "diag_a"}}}},
+    },
+}
+
+
+class TestLenientInference:
+    """``infer_units(..., available=)`` answers *what will the run build?*
+
+    Without it, one absent diagnostic leaves every ancestor unknown -- including
+    the budget roots, which the run builds perfectly well from what remains.
+    """
+
+    @staticmethod
+    def _grid_and_callbacks():
+        grid = build_synthetic_grid()
+        grid._ds["diag_a"].attrs["units"] = "kg s-1"
+        ds = grid._ds
+        return (
+            grid,
+            lambda n: ds[n].attrs.get("units") if n in ds else None,
+            lambda n: n in ds,
+        )
+
+    @pytest.mark.parametrize("label", list(GAPPY))
+    def test_lenient_matches_the_run_where_strict_gives_up(self, label):
+        grid, lookup, available = self._grid_and_callbacks()
+        recipe = {"tracer": {"units": "kg s-1", "rhs": GAPPY[label]}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe)
+        stamped = grid._ds["tracer_rhs"].attrs.get("units")
+        assert stamped is not None, "the evaluator did build this root"
+
+        root = parse_budgets(recipe)["tracer"].sides["rhs"]
+        assert U.infer_units(root, lookup) is None          # strict gives up...
+        assert U.format_units(                              # ...lenient agrees
+            U.infer_units(root, lookup, available)
+        ) == stamped
+
+    def test_a_term_that_will_not_be_built_stays_unknown(self):
+        # Leniency is not optimism: a product missing a factor is dropped by the
+        # evaluator, and inference must say so rather than invent units.
+        grid, lookup, available = self._grid_and_callbacks()
+        recipe = {"tracer": {"rhs": {"product": {
+            "a": "diag_a", "gone": "not_present",
+        }}}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe)
+        assert "tracer_rhs" not in grid._ds
+        root = parse_budgets(recipe)["tracer"].sides["rhs"]
+        assert U.infer_units(root, lookup, available) is None
+
+    def test_present_but_unitless_still_poisons(self):
+        # An operand that *is* there but carries no units is unknown, not
+        # dropped: the run builds the sum and cannot label it.
+        grid, lookup, available = self._grid_and_callbacks()
+        # `diag_b` exists on the synthetic grid with no units attribute.
+        recipe = {"tracer": {"rhs": {"sum": {
+            "a": {"var": "diag_a"}, "b": {"var": "diag_b"},
+        }}}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe)
+        assert "units" not in grid._ds["tracer_rhs"].attrs
+        root = parse_budgets(recipe)["tracer"].sides["rhs"]
+        assert U.infer_units(root, lookup, available) is None
+
+
+class TestScale:
+    def test_scale_factor_and_same_scale(self):
+        assert U.same_scale(_u("kg s-1"), _u("kg s-1"))
+        assert not U.same_scale(_u("g s-1"), _u("kg s-1"))
+        assert U.scale_factor(_u("g s-1"), _u("kg s-1")) == pytest.approx(1e-3)
+        assert U.scale_factor(_u("W"), _u("kg s-1")) is None   # incompatible
+        # Offset units report their scale, not their offset.
+        assert U.scale_factor(_u("degC"), _u("K")) == pytest.approx(1.0)
+
+
 # -- inference, stamping, and assert_unit_consistency ----------------------
 
 def _units_grid():
@@ -347,6 +474,73 @@ class TestInferenceAndAssertion:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 xbudget.collect_budgets(grid, CONSISTENT, assert_unit_consistency=True)
+
+    def test_assert_catches_a_right_dimension_wrong_magnitude_root(self):
+        # The failure the feature exists to catch and that dimensional
+        # convertibility alone cannot see: a scale carried in an input's units
+        # survives into the stamped label, so the attribute misreports the values
+        # by that factor. CF really does write salinity this way (ECCO: `1e-3`).
+        grid = build_synthetic_grid()
+        grid._ds["diag_a"].attrs["units"] = "1e-3 m3 s-1"   # salinity x volume
+        recipe = {"salt": {"units": "kg s-1", "rhs": {"product": {
+            "flux": "diag_a",
+            "density": {"value": 1029.0, "units": "kg m-3"},
+            "unit_conversion": 0.001,          # bare: cancels nothing in the units
+        }}}}
+        with pytest.raises(xbudget.UnitError, match="wrong magnitude") as exc:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                xbudget.collect_budgets(grid, recipe, assert_unit_consistency=True)
+        assert exc.value.issues[0]["kind"] == "scale-mismatch"
+
+    def test_a_conversion_constant_declaring_its_scale_reconciles(self):
+        # The fix the error message points at: give the factor the reciprocal
+        # scale as its units, so value x units == 1 and the scale cancels.
+        grid = build_synthetic_grid()
+        grid._ds["diag_a"].attrs["units"] = "1e-3 m3 s-1"
+        recipe = {"salt": {"units": "kg s-1", "rhs": {"product": {
+            "flux": "diag_a",
+            "density": {"value": 1029.0, "units": "kg m-3"},
+            "unit_conversion": {"value": 0.001, "units": "1e3"},
+        }}}}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe, assert_unit_consistency=True)
+        stamped = grid._ds["salt_rhs"].attrs["units"]
+        assert U.same_scale(U.parse_units(stamped), _u("kg s-1"))
+        # ...and the values are untouched: only the label changed.
+        expected = grid._ds["diag_a"] * 1029.0 * 0.001
+        assert float(abs(grid._ds["salt_rhs"] - expected).max()) == 0.0
+
+    def test_unmaterialized_side_root_is_exempt(self):
+        # Documented limitation: `on_missing` governs absent inputs, so a side
+        # that never got built is not also failed here under a different name.
+        grid = _units_grid()
+        recipe = {"tracer": {
+            "units": "kg s-1",
+            "lhs": {"product": {"d": "not_present"}},
+            "rhs": CONSISTENT["tracer"]["rhs"],
+        }}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, recipe, assert_unit_consistency=True)
+        assert "tracer_lhs" not in grid._ds
+
+    def test_missing_diagnostic_is_reported_before_unknown_units(self):
+        # A missing input *causes* unknown units; reporting the symptom first
+        # would swallow the name of the diagnostic the user has to supply.
+        grid = build_synthetic_grid()   # no units on anything
+        recipe = {"tracer": {"units": "kg s-1", "rhs": {"sum": {
+            "present": {"var": "diag_a"},
+            "absent": {"product": {"d": "not_present"}},
+        }}}}
+        with pytest.raises(xbudget.MissingDiagnosticError, match="not_present"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                xbudget.collect_budgets(
+                    grid, recipe, on_missing="raise",
+                    assert_unit_consistency=True,
+                )
 
     def test_undeclared_budget_is_not_checked(self):
         grid = _units_grid()

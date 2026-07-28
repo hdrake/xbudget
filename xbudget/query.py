@@ -718,7 +718,10 @@ class BudgetQuery:
                 stamped = self._ds[var].attrs.get("units")
                 if stamped:
                     return stamped
-        return format_units(infer_units(node, self._diagnostic_units))
+        available = None if self._ds is None else (lambda name: name in self._ds)
+        return format_units(
+            infer_units(node, self._diagnostic_units, available)
+        )
 
     def _diagnostic_units(self, name):
         if self._ds is None or name not in self._ds:

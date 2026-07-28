@@ -125,6 +125,23 @@ def test_tolerated_malformations_warn_and_skip(tolerated):
     assert rhs.operations == ()
 
 
+@pytest.mark.parametrize("key", ["units", "lambda", "thickness"])
+def test_budget_metadata_on_a_term_gets_its_own_warning(key):
+    """`units: "W"` on a term is a specific mistake, not a missing `product:`.
+
+    The generic stray-key hint ("this term may be missing an enclosing
+    operation") would send the user looking for the wrong thing -- and putting
+    `units` on a term is the natural mistake to make once you have learned that
+    budgets declare theirs.
+    """
+    recipe = {"heat": {"rhs": {"sum": {"t": {key: "W", "var": "x"}}}}}
+    with pytest.warns(UserWarning, match="budget-level metadata"):
+        budgets = parse_budgets(recipe)
+    # Tolerated, like any stray key: the term still parses, minus the key.
+    term = dict(budgets["heat"].sides["rhs"].operations[0].terms)["t"]
+    assert term.explicit_var == "x"
+
+
 @pytest.mark.parametrize("path", RECIPES)
 def test_all_shipped_recipes_parse(path):
     import yaml

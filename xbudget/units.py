@@ -60,6 +60,8 @@ __all__ = [
     "difference_units",
     "divergence_units",
     "convertible",
+    "scale_factor",
+    "same_scale",
     "format_units",
     "infer_units",
 ]
@@ -167,12 +169,43 @@ def convertible(unit, other):
     return unit.is_convertible(other)
 
 
+def scale_factor(unit, other):
+    """How many ``other`` one ``unit`` is, or ``None`` if they are incompatible.
+
+    UDUNITS treats a leading number as part of a unit — ``1e-3 m3 s-1`` is a
+    real, common CF spec (ECCO writes practical salinity that way) — so two units
+    can share a dimension and still differ by a numeric scale. This reports that
+    scale: ``1.0`` means the two are the same magnitude, ``0.001`` that a value
+    labelled ``unit`` is a thousandth of the same number labelled ``other``.
+
+    Computed as a difference of two conversions so an offset unit (``degC`` to
+    ``K``) reports its scale rather than its offset.
+    """
+    if not convertible(unit, other):
+        return None
+    zero = unit.convert(0.0, other)
+    return unit.convert(1.0, other) - zero
+
+
+def same_scale(unit, other, rtol=1e-9):
+    """Whether ``unit`` and ``other`` are the same dimension *and* magnitude."""
+    factor = scale_factor(unit, other)
+    return factor is not None and abs(factor - 1.0) <= rtol
+
+
 def format_units(unit):
     """A stable string for a ``Unit`` (for stamping as an attribute), or ``None``."""
     return None if unit is None else str(unit)
 
 
-def infer_units(node, lookup=None):
+#: Sentinel for a node the evaluator would not build at all (a missing
+#: diagnostic, an absent ``optional`` subtree). Distinct from ``None``, which
+#: means "built, but its units are unknown": a dropped operand is *excluded*
+#: from its parent's arithmetic, an unknown one *poisons* it.
+_DROPPED = object()
+
+
+def infer_units(node, lookup=None, available=None):
     """Infer a node's units directly from the typed tree, without evaluating.
 
     The evaluator infers units as a side-effect of building variables, which is
@@ -186,48 +219,88 @@ def infer_units(node, lookup=None):
     carry units, so most terms come back unknown; with it, everything a
     dimensionally complete recipe describes resolves.
 
+    ``available`` is an optional ``name -> bool`` predicate naming the
+    diagnostics a dataset actually holds. Supplying it answers the more useful
+    question — *what will the run produce?* rather than *what does the recipe
+    describe?* — by dropping the operands the evaluator would drop instead of
+    letting them poison their ancestors. Without it, one absent diagnostic
+    anywhere leaves every term above it unknown, even though the run will build
+    them all quite happily from the operands that remain.
+
     Returns a :class:`cf_units.Unit` or ``None`` (unknown). Like the rest of this
     module it never raises: an unresolvable node is unknown, not an error.
     """
     if lookup is None:
         def lookup(_name):
             return None
-    return _infer(node, lookup)
+    units = _infer(node, lookup, available)
+    return None if units is _DROPPED else units
 
 
-def _infer(node, lookup):
+def _resolves(name, available):
+    """Whether a diagnostic is present (always true when we cannot tell)."""
+    return available is None or available(name)
+
+
+def _infer(node, lookup, available):
     if isinstance(node, Constant):
         return parse_units(node.units)
     if isinstance(node, VarRef):
+        if not _resolves(node.name, available):
+            return _DROPPED
         return parse_units(lookup(node.name))
     if isinstance(node, Term):
-        return _infer_term(node, lookup)
+        return _infer_term(node, lookup, available)
     if isinstance(node, Sum):
-        return sum_units([_infer(o, lookup) for _n, o in node.terms])
+        # A sum keeps its surviving operands (evaluate._eval_nary), so a dropped
+        # one is left out rather than making the sum unknown.
+        kept = [
+            u for u in (_infer(o, lookup, available) for _n, o in node.terms)
+            if u is not _DROPPED
+        ]
+        return sum_units(kept) if kept else _DROPPED
     if isinstance(node, Product):
-        return product_units([_infer(o, lookup) for _n, o in node.terms])
+        # A product needs every factor; one missing drops the whole term.
+        operands = [_infer(o, lookup, available) for _n, o in node.terms]
+        if any(u is _DROPPED for u in operands):
+            return _DROPPED
+        return product_units(operands)
     if isinstance(node, Difference):
-        return difference_units(_infer(node.operand, lookup))
+        operand = _infer(node.operand, lookup, available)
+        return _DROPPED if operand is _DROPPED else difference_units(operand)
     if isinstance(node, Reciprocal):
+        if not _resolves(node.source, available):
+            return _DROPPED
         return reciprocal_units(parse_units(lookup(node.source)))
     if isinstance(node, LateralDivergence):
-        return divergence_units(_infer(node.fx, lookup), _infer(node.fy, lookup))
+        fx = _infer(node.fx, lookup, available)
+        fy = _infer(node.fy, lookup, available)
+        if fx is _DROPPED or fy is _DROPPED:
+            return _DROPPED
+        return divergence_units(fx, fy)
     return None
 
 
-def _infer_term(term, lookup):
+def _infer_term(term, lookup, available):
     """Units of a term's *primary* value, mirroring the evaluator's choice.
 
     A leaf ``var`` claims the term's name outright; otherwise the first
-    sum/product operation does, falling back to the first operation of any kind
-    (see ``evaluate._Evaluator._eval_term``).
+    sum/product operation *that produced anything* does, falling back to the
+    first surviving operation of any kind. Which operation owns the term's name
+    is a run-time fact — a skipped primary hands it to a sibling — so this
+    mirrors ``evaluate._Evaluator._eval_term`` rather than reading the recipe's
+    order alone.
     """
-    if isinstance(term.explicit_var, str):
+    if isinstance(term.explicit_var, str) and _resolves(term.explicit_var, available):
         return parse_units(lookup(term.explicit_var))
     if not term.operations:
-        return None
+        return _DROPPED if term.explicit_var is not None else None
+    evaluated = [(op, _infer(op, lookup, available)) for op in term.operations]
+    surviving = [(op, u) for op, u in evaluated if u is not _DROPPED]
+    if not surviving:
+        return _DROPPED
     primary = next(
-        (op for op in term.operations if isinstance(op, (Sum, Product))),
-        term.operations[0],
+        (u for op, u in surviving if isinstance(op, (Sum, Product))),
+        surviving[0][1],
     )
-    return _infer(primary, lookup)
+    return primary

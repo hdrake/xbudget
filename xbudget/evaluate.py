@@ -65,6 +65,8 @@ from .units import (
     parse_units,
     product_units,
     reciprocal_units,
+    same_scale,
+    scale_factor,
     sum_compatible,
     sum_units,
 )
@@ -135,9 +137,27 @@ class _Evaluator:
         for budget in budgets.values():
             for term in budget.sides.values():
                 self._eval_term(term)
-        self._check_units(budgets)
+        # Missing diagnostics first: an absent input is a *cause* of unknown
+        # units, so reporting "units could not be inferred" ahead of it would
+        # hand the user the symptom and swallow the name of the diagnostic they
+        # actually need to supply.
         self._finish()
+        self._check_units(budgets)
+        self._report_units()
         return self.records
+
+    def _require_grid(self, operation):
+        """Fail clearly when an operation that needs a grid was given a Dataset.
+
+        Checked in the evaluator rather than only inside the helpers, so it fires
+        before any grid-dependent bookkeeping (axis lookup, rechunking) — which
+        would otherwise raise an unhelpful ``AttributeError`` on ``None`` first.
+        """
+        if self.grid is None:
+            raise ValueError(
+                f"Input `data` must be an `xgcm.Grid` instance when using "
+                f"`{operation}` operations."
+            )
 
     # -- missing-diagnostic reporting ---------------------------------------
 
@@ -190,11 +210,23 @@ class _Evaluator:
         """Reconcile each declared budget's root sides against its stated units.
 
         A budget that declares a top-level ``units`` (e.g. ``mass`` -> ``kg s-1``)
-        opts into the check: every materialized side root must infer units that
-        are dimensionally convertible to the declared ones. Budgets that declare
-        no ``units`` are only stamped, never checked. Issues found here join any
-        sum-incompatibilities recorded during evaluation and are reported once by
-        :meth:`_report_units`.
+        opts into the check: every materialized side root must infer units equal
+        to the declared ones — same dimension *and* same magnitude. Budgets that
+        declare no ``units`` are only stamped, never checked. Issues found here
+        join any sum-incompatibilities recorded during evaluation and are
+        reported once by :meth:`_report_units`.
+
+        Magnitude is checked, not just dimension, because a leading numeric
+        factor is part of a UDUNITS spec and therefore part of what a stamped
+        ``units`` attribute *claims*. A root that infers ``0.001 kg s-1`` while
+        holding values that are already kg/s is mislabelled by a factor of a
+        thousand for anyone who reads the attribute — the exact error this check
+        exists to catch, and one that dimensional convertibility cannot see.
+
+        A side root that never materialized (its diagnostics were missing) is
+        skipped rather than failed: ``on_missing`` is the setting that governs
+        absent inputs, and failing here too would report one problem twice under
+        the wrong name.
         """
         for name, budget in budgets.items():
             declared_str = budget.metadata.get("units")
@@ -233,7 +265,22 @@ class _Evaluator:
                             f"to declared {declared_str!r}"
                         ),
                     })
-        self._report_units()
+                elif not same_scale(inferred, declared):
+                    factor = scale_factor(inferred, declared)
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "scale-mismatch",
+                        "detail": (
+                            f"inferred {format_units(inferred)!r} is "
+                            f"{factor:g}x the declared {declared_str!r} — right "
+                            f"dimension, wrong magnitude, so the stamped units "
+                            f"misreport the values by that factor. A conversion "
+                            f"constant that cancels a scale in an input's units "
+                            f"must declare the reciprocal scale as its own units "
+                            f"(e.g. {{value: 0.001, units: \"1e3\"}}), not be "
+                            f"written as a bare (dimensionless) number"
+                        ),
+                    })
 
     def _report_units(self):
         """Raise (asserting) or warn (default) about accumulated unit issues, once."""
@@ -382,9 +429,14 @@ class _Evaluator:
 
     @staticmethod
     def _single_chunk_along(arr, dims):
-        """``arr`` rechunked into one chunk along ``dims``, the rest ``auto``."""
+        """``arr`` rechunked into one chunk along ``dims``, the rest ``auto``.
+
+        A no-op on an unchunked (in-memory) array: it is already one chunk along
+        everything, so calling ``.chunk()`` would only convert it to dask and
+        hand the caller a lazy result where they passed an eager one.
+        """
         along = [d for d in arr.dims if d in dims]
-        if not along:
+        if not along or arr.chunks is None:
             return arr
         return arr.chunk({
             **{d: -1 for d in along},
@@ -425,6 +477,7 @@ class _Evaluator:
         return var, op.source, {"missing": [], "incomplete": False, "units": units}
 
     def _eval_lateral_divergence(self, op, term, opt):
+        self._require_grid("lateral_divergence")
         fx = self._eval_term(op.fx, optional_ctx=opt)
         fy = self._eval_term(op.fy, optional_ctx=opt)
         if fx is None or fy is None:
@@ -539,11 +592,7 @@ class _Evaluator:
         }
 
     def _eval_difference(self, op, term, opt):
-        if self.grid is None:
-            raise ValueError(
-                "Input `data` must be an `xgcm.Grid` instance when using "
-                "`difference` operations."
-            )
+        self._require_grid("difference")
         ds = self.ds
         operand = op.operand
         incomplete = False
