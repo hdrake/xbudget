@@ -73,6 +73,25 @@ lateral:
     area: "areacello"
 ```
 
+**Constants can carry units.** A bare number is treated as *dimensionless*. To
+give a constant a physical unit — so it participates in unit inference — write it
+as a `{value:, units:}` mapping with a [UDUNITS][udunits] string:
+
+```yaml
+product:
+  thickness_tendency: "dhdt"          # its own units come from the dataset
+  density:
+    value: 1035.
+    units: "kg m-3"
+  area: "areacello"
+```
+
+Only genuinely dimensional constants need this (`density`, `specific_heat_capacity`);
+`sign`, salinity-to-mass conversion factors, and the like are dimensionless and
+stay bare. See the *Units* section below.
+
+[udunits]: https://www.unidata.ucar.edu/software/udunits/
+
 Budget-level keys that are not `lhs`/`rhs` are metadata, carried through
 untouched — `lambda` (the tracer the budget is written in), `thickness`,
 `surface_lambda`:
@@ -101,6 +120,47 @@ q.lambda_var("heat")     # -> "thetao"
 q.surface_lambda("heat") # -> "tos"
 q.metadata("mass")       # -> {"lambda": "density", "thickness": "thkcello"}
 ```
+
+## Units
+
+Every variable xbudget materializes is stamped with an inferred `units`
+attribute. Units compose through the tree with real [UDUNITS][udunits] arithmetic
+(via [`cf-units`][cf-units]): a `product` multiplies its operands' units, a `sum`
+takes the common unit of its summands (which must be dimensionally compatible), a
+`difference` preserves units, a `reciprocal` inverts them, and a
+`lateral_divergence` carries the flux unit. Each input's units come from its own
+`units` attribute in the dataset; constants supply theirs from the recipe (see
+above). If any input's units are unknown (a missing or unparseable `units`
+attribute), the result's units are left unset rather than guessed.
+
+A budget can declare the units its closed sides should reconcile to, as a
+top-level `units` key:
+
+```yaml
+mass:
+  units: "kg s-1"
+  lambda: "density"
+  ...
+```
+
+With `strict=True`, this is enforced: each budget that declares `units` must have
+its `lhs`/`rhs` roots infer units convertible to the declared ones, or
+`collect_budgets` raises `xbudget.UnitError`. Without `strict` (the default) a
+mismatch only warns — inference and stamping happen regardless.
+
+```python
+xbudget.collect_budgets(grid, recipe, strict=True)   # raises UnitError on a clash
+q = xbudget.BudgetQuery(grid, recipe)
+q.budget_units("mass")            # -> "kg s-1"     (the declared target)
+q.units(("mass", "rhs"))          # -> "kg.s-1"     (what the run inferred)
+```
+
+Two conventions the shipped recipes rely on: practical salinity (`psu`), which
+UDUNITS does not define, is treated as dimensionless (PSS-78), and offset
+temperature (`degC`) is dimensionalized to kelvin inside a product, so
+heat-content terms (θ·cₚ·ρ·…) reconcile to `W`.
+
+[cf-units]: https://cf-units.readthedocs.io/
 
 ## Seeing a recipe
 

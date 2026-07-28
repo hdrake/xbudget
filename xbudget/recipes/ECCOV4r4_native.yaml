@@ -1,5 +1,6 @@
 ---
 mass: # finite-volume mass budget in units of kg/s
+  units: "kg s-1"
   lambda: "density"
   thickness: "thkcello"
   # GM eddy-bolus mass transports (kg/s), exposed for downstream water-mass
@@ -27,7 +28,9 @@ mass: # finite-volume mass budget in units of kg/s
               volume: "volcello"
               deptho_inv:
                 reciprocal: {deptho: {var: "Depth"}}
-          density: 1029.0
+          density:
+            value: 1029.0
+            units: "kg m-3"
   rhs:
     sum:
       advection:
@@ -37,7 +40,9 @@ mass: # finite-volume mass budget in units of kg/s
           lateral: # Eulerian lateral mass-flux convergence, div(-Fx,-Fy) = -div(Fx,Fy)
             product:
               sign: -1.0
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               volume_flux_divergence:
                 lateral_divergence:
                   Fx:
@@ -48,7 +53,9 @@ mass: # finite-volume mass budget in units of kg/s
             product:
               volume_flux_convergence:
                 difference: {z_velocity: "WVELMASS_interior"} # WVELMASS zeroed at surface to avoid double-counting oceFWflx
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               area: "rA"
       surface_exchange_flux:
         product:
@@ -57,13 +64,18 @@ mass: # finite-volume mass budget in units of kg/s
           area: "rA"
 
 heat: # finite-volume heat budget in s* in units of J/s (W)
+  units: "W"
   lambda: "THETA"
   lhs:
     sum:
       Eulerian_tendency:
         product:
-          density: 1029.0
-          specific_heat_capacity: 3994.0
+          density:
+            value: 1029.0
+            units: "kg m-3"
+          specific_heat_capacity:
+            value: 3994.0
+            units: "J kg-1 K-1"
           volume: "volcello"
           heatcontenttend:
             product:
@@ -92,8 +104,12 @@ heat: # finite-volume heat budget in s* in units of J/s (W)
         sum:
           lateral:
             product:
-              density: 1029.0
-              specific_heat_capacity: 3994.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
+              specific_heat_capacity:
+                value: 3994.0
+                units: "J kg-1 K-1"
               heat_flux_convergence:
                 product:
                   heat_flux_divergence:
@@ -105,16 +121,24 @@ heat: # finite-volume heat budget in s* in units of J/s (W)
                   sign: -1.0
           interfacial:
             product:
-              density: 1029.0
-              specific_heat_capacity: 3994.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
+              specific_heat_capacity:
+                value: 3994.0
+                units: "J kg-1 K-1"
               heat_flux_convergence:
                 difference: {advr_th: "ADVr_TH"}
       diffusion:
         sum:
           lateral:
             product:
-              density: 1029.0
-              specific_heat_capacity: 3994.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
+              specific_heat_capacity:
+                value: 3994.0
+                units: "J kg-1 K-1"
               explicit_heat_flux_convergence:
                 product:
                   heat_flux_divergence:
@@ -128,37 +152,56 @@ heat: # finite-volume heat budget in s* in units of J/s (W)
                   sign: -1.0
           explicit_vertical_diffusion:
             product:
-              density: 1029.0
-              specific_heat_capacity: 3994.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
+              specific_heat_capacity:
+                value: 3994.0
+                units: "J kg-1 K-1"
               heat_flux_convergence:
                 difference: {dfrE_th: "DFrE_TH"}
           implicit_vertical_diffusion:
             product:
-              density: 1029.0
-              specific_heat_capacity: 3994.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
+              specific_heat_capacity:
+                value: 3994.0
+                units: "J kg-1 K-1"
               heat_flux_convergence:
                 difference: {dfrI_th: "DFrI_TH"}
                   
       surface_exchange_flux:  # sum: #TFLUX, QFLUX, etc. includes freshwater forcing 
         product:
-          density: 1029.0
-          specific_heat_capacity: 3994.0
+          density:
+            value: 1029.0
+            units: "kg m-3"
+          specific_heat_capacity:
+            value: 3994.0
+            units: "J kg-1 K-1"
           boundary_heat_flux: "boundary_forcing_heat_tendency"  # deg C /s 
       bottom_flux:
         product:
-          density: 1029.0
-          specific_heat_capacity: 3994.0
+          density:
+            value: 1029.0
+            units: "kg m-3"
+          specific_heat_capacity:
+            value: 3994.0
+            units: "J kg-1 K-1"
           surface_heat_flux: "geothermal_heat_flux_convergence"  # deg C m^3 /s 
 
 
 salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not salinity)
+  units: "kg s-1"
   # Salt content per cell:  ρ * V * (s* SALT) * 1e-3   since SALT is in psu ~ g/kg
   lambda: "SALT"
   lhs:
     sum:
       Eulerian_tendency:
         product:
-          density: 1029.0
+          density:
+            value: 1029.0
+            units: "kg m-3"
           volume: "volcello"
           unit_conversion: 0.001
           saltcontenttend:
@@ -185,7 +228,9 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
 
           lateral:
             product:
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               unit_conversion: 0.001
               sign: -1.0
               salt_flux_divergence:
@@ -195,7 +240,9 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
 
           interfacial:
             product:
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               unit_conversion: 0.001
               salt_flux_convergence:
                 difference: {advr_slt: "ADVr_SLT"}
@@ -204,7 +251,9 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
         sum:
           lateral:
             product:
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               unit_conversion: 0.001
               sign: -1.0
               salt_flux_divergence:
@@ -214,13 +263,17 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
 
           explicit_vertical_diffusion:
             product:
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               unit_conversion: 0.001
               salt_flux_convergence:
                 difference: {dfrE_slt: "DFrE_SLT"}
           implicit_vertical_diffusion:
             product:
-              density: 1029.0
+              density:
+                value: 1029.0
+                units: "kg m-3"
               unit_conversion: 0.001
               salt_flux_convergence:
                 difference: {dfrI_slt: "DFrI_SLT"}

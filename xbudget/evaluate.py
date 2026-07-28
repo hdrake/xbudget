@@ -57,6 +57,17 @@ from .collect import (
     _warn_if_summands_broadcast,
     lateral_divergence,
 )
+from .units import (
+    convertible,
+    difference_units,
+    divergence_units,
+    format_units,
+    parse_units,
+    product_units,
+    reciprocal_units,
+    sum_compatible,
+    sum_units,
+)
 
 ON_MISSING = ("warn", "raise", "ignore")
 
@@ -73,13 +84,25 @@ class MissingDiagnosticError(ValueError):
         self.missing = missing
 
 
+class UnitError(ValueError):
+    """A budget's units did not reconcile under ``strict=True``.
+
+    Carries the list of ``(budget, side, inferred, declared, kind)`` issues, so
+    the caller sees every mismatch/unknown at once rather than only the first.
+    """
+
+    def __init__(self, message, issues):
+        super().__init__(message)
+        self.issues = issues
+
+
 def _new_name(path):
     """Output variable name: the term path joined, without operator infixes."""
     return "_".join(path)
 
 
 class _Evaluator:
-    def __init__(self, data, allow_rechunk=True, on_missing="warn"):
+    def __init__(self, data, allow_rechunk=True, on_missing="warn", strict=False):
         if on_missing not in ON_MISSING:
             raise ValueError(
                 f"Unknown on_missing {on_missing!r}; expected one of {ON_MISSING}."
@@ -92,17 +115,21 @@ class _Evaluator:
             self.ds = data
         self.allow_rechunk = allow_rechunk
         self.on_missing = on_missing
+        self.strict = strict
         # new variable name -> {"path", "op"}
         self.records = {}
         # Missing-diagnostic bookkeeping, drained once at the end of run().
         # Only *required* (non-optional) misses land here.
         self._missing = []        # list of (diagnostic_name, term_path tuple)
         self._incomplete = []     # names of emitted variables flagged incomplete
+        # (budget, side, inferred, declared, kind) unit reconciliation issues.
+        self._unit_issues = []
 
     def run(self, budgets):
         for budget in budgets.values():
             for term in budget.sides.values():
                 self._eval_term(term)
+        self._check_units(budgets)
         self._finish()
         return self.records
 
@@ -150,6 +177,77 @@ class _Evaluator:
                 UserWarning,
             )
         # on_missing == "ignore": stay silent (the attrs were still stamped).
+
+    # -- unit reconciliation ------------------------------------------------
+
+    def _check_units(self, budgets):
+        """Reconcile each declared budget's root sides against its stated units.
+
+        A budget that declares a top-level ``units`` (e.g. ``mass`` -> ``kg s-1``)
+        opts into the check: every materialized side root must infer units that
+        are dimensionally convertible to the declared ones. Budgets that declare
+        no ``units`` are only stamped, never checked. Issues found here join any
+        sum-incompatibilities recorded during evaluation and are reported once by
+        :meth:`_report_units`.
+        """
+        for name, budget in budgets.items():
+            declared_str = budget.metadata.get("units")
+            if declared_str is None:
+                continue
+            declared = parse_units(declared_str)
+            if declared is None:
+                self._unit_issues.append({
+                    "location": name,
+                    "kind": "declared-unparseable",
+                    "detail": (
+                        f"budget declares units {declared_str!r}, which UDUNITS "
+                        f"cannot parse"
+                    ),
+                })
+                continue
+            for side, term in budget.sides.items():
+                var = _new_name(term.path)
+                if var not in self.ds:
+                    continue
+                inferred = parse_units(self.ds[var].attrs.get("units"))
+                if inferred is None:
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "unknown",
+                        "detail": (
+                            f"units could not be inferred; expected {declared_str!r}"
+                        ),
+                    })
+                elif not convertible(inferred, declared):
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "mismatch",
+                        "detail": (
+                            f"inferred {format_units(inferred)!r} not convertible "
+                            f"to declared {declared_str!r}"
+                        ),
+                    })
+        self._report_units()
+
+    def _report_units(self):
+        """Raise (strict) or warn (default) about accumulated unit issues, once."""
+        if not self._unit_issues:
+            return
+        detail = "\n".join(
+            f"  - {i['location']}: {i['detail']}" for i in self._unit_issues
+        )
+        if self.strict:
+            raise UnitError(
+                "collect_budgets(strict=True): budget units did not reconcile:\n"
+                + detail,
+                issues=list(self._unit_issues),
+            )
+        warnings.warn(
+            "xbudget: budget units did not fully reconcile:\n" + detail
+            + "\nInspect stamped units with BudgetQuery.units(...); pass "
+            "strict=True to fail instead.",
+            UserWarning,
+        )
 
     # -- term ---------------------------------------------------------------
 
@@ -217,6 +315,9 @@ class _Evaluator:
                 "xbudget_path": list(term.path),
                 "xbudget_op": op.kind,
             }
+            units = format_units(opmeta.get("units") if opmeta else None)
+            if units is not None:
+                out.attrs["units"] = units
             self._stamp_incompleteness(out, opmeta, opt)
             self.ds[new_name] = out
             self.records[new_name] = {"path": list(term.path), "op": op.kind}
@@ -264,7 +365,8 @@ class _Evaluator:
             self._record_missing(op.source, term.path, alarming=not opt)
             return None, None, None
         var = 1.0 / xr.where(ds[op.source] == 0, np.inf, ds[op.source])
-        return var, op.source, {"missing": [], "incomplete": False}
+        units = reciprocal_units(parse_units(ds[op.source].attrs.get("units")))
+        return var, op.source, {"missing": [], "incomplete": False, "units": units}
 
     def _eval_lateral_divergence(self, op, term, opt):
         fx = self._eval_term(op.fx, optional_ctx=opt)
@@ -277,36 +379,47 @@ class _Evaluator:
         incomplete = bool(fx.attrs.get("xbudget_incomplete")) or bool(
             fy.attrs.get("xbudget_incomplete")
         )
-        return var, [fx.name, fy.name], {"missing": [], "incomplete": incomplete}
+        units = divergence_units(
+            parse_units(fx.attrs.get("units")), parse_units(fy.attrs.get("units"))
+        )
+        return var, [fx.name, fy.name], {
+            "missing": [], "incomplete": incomplete, "units": units,
+        }
 
     def _eval_nary(self, op, term, opt):
         ds = self.ds
         op_list = []
+        unit_list = []     # units of each surviving operand, in lockstep with op_list
         missing = []       # labels/names of operands dropped at this node
         incomplete = False
         for name, operand in op.terms:
             value = None
+            units = None
             operand_optional = opt
             if isinstance(operand, Term):
                 operand_optional = opt or operand.optional
                 child = self._eval_term(operand, optional_ctx=operand_optional)
                 if child is not None:
                     value = child
+                    units = parse_units(child.attrs.get("units"))
                     if child.attrs.get("xbudget_incomplete"):
                         incomplete = True
                 # else: the child already recorded its own missing diagnostic.
                 dropped_label = name
             elif isinstance(operand, Constant):
                 value = operand.value
+                units = parse_units(operand.units)
             elif isinstance(operand, VarRef):
                 if operand.name in ds:
                     value = ds[operand.name]
+                    units = parse_units(ds[operand.name].attrs.get("units"))
                 else:
                     self._record_missing(operand.name, term.path, alarming=not opt)
                 dropped_label = operand.name
 
             if value is not None:
                 op_list.append(value)
+                unit_list.append(units)
                 continue
 
             # This operand did not resolve.
@@ -323,13 +436,29 @@ class _Evaluator:
             return None, None, None
         if op.kind == "sum":
             _warn_if_summands_broadcast(op_list, _new_name(term.path))
+            if not sum_compatible(unit_list):
+                # A genuine unit clash between summands (not merely an unknown one)
+                # is always a recipe bug; record it for the end-of-run report.
+                self._unit_issues.append({
+                    "location": _new_name(term.path),
+                    "kind": "sum-incompatible",
+                    "detail": (
+                        "summands have incompatible units: "
+                        + ", ".join(sorted({format_units(u) for u in unit_list if u}))
+                    ),
+                })
+            units = sum_units(unit_list)
+        else:
+            units = product_units(unit_list)
         var = sum(op_list) if op.kind == "sum" else reduce(mul, op_list, 1)
         if not isinstance(var, xr.DataArray):
             # Reduced to a pure scalar (e.g. all variable operands missing); no
             # variable is emitted in this case.
             return None, None, None
         provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
-        return var, provenance, {"missing": missing, "incomplete": incomplete}
+        return var, provenance, {
+            "missing": missing, "incomplete": incomplete, "units": units,
+        }
 
     def _eval_difference(self, op, term, opt):
         if self.grid is None:
@@ -352,6 +481,7 @@ class _Evaluator:
                 return None, None, None
             provenance = source.name
             incomplete = bool(source.attrs.get("xbudget_incomplete"))
+        units = difference_units(parse_units(source.attrs.get("units")))
 
         staggered_axes = {
             axn: c
@@ -407,10 +537,14 @@ class _Evaluator:
         else:
             var = self.grid.diff(source.fillna(0.0), axis)
 
-        return var, provenance, {"missing": [], "incomplete": incomplete}
+        return var, provenance, {
+            "missing": [], "incomplete": incomplete, "units": units,
+        }
 
 
-def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
+def evaluate_budgets(
+    data, budgets, allow_rechunk=True, on_missing="warn", strict=False
+):
     """Evaluate parsed budgets into ``data``; return ``records``.
 
     Parameters
@@ -429,6 +563,13 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
         case the affected variables are stamped with ``xbudget_incomplete`` /
         ``xbudget_missing`` attributes, and terms declared ``optional`` in the
         recipe are exempt.
+    strict : bool, default False
+        Enforce budget units. Each output variable is stamped with an inferred
+        ``units`` attribute regardless; ``strict=True`` additionally requires
+        every budget that declares a top-level ``units`` to have its side roots
+        infer units convertible to the declared ones (and no unit clashes),
+        raising :class:`UnitError` otherwise. When ``False`` a reconciliation
+        failure only warns.
 
     Returns
     -------
@@ -453,5 +594,5 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
     tree or want to control the two steps separately.
     """
     return _Evaluator(
-        data, allow_rechunk=allow_rechunk, on_missing=on_missing
+        data, allow_rechunk=allow_rechunk, on_missing=on_missing, strict=strict
     ).run(budgets)

@@ -329,6 +329,34 @@ class BudgetQuery:
         """
         return dict(self.metadata(budget).get("bolus", {}))
 
+    def budget_units(self, budget):
+        """The top-level ``units`` a budget declares, or ``None``.
+
+        The UDUNITS string a budget states as the units its closed sides should
+        reconcile to (e.g. ``"kg s-1"`` for ``mass``). Read from budget metadata;
+        raises ``KeyError`` for an unknown budget, as :meth:`metadata` does. This
+        is the *declared* target; :meth:`units` returns what a run actually
+        inferred for a given term.
+        """
+        return self.metadata(budget).get("units")
+
+    def units(self, address):
+        """The inferred ``units`` attribute stamped on a term's variable, or ``None``.
+
+        Reads the ``units`` attribute the evaluator stamped onto the materialized
+        variable (so it also works on a dataset reopened from disk). Returns
+        ``None`` when the query has no dataset, the term did not materialize, or
+        its units could not be inferred (an input's units were unknown). Accepts
+        the same addresses as :meth:`var` — a term name/path, an operation-suffixed
+        name, or a raw diagnostic.
+        """
+        if self._ds is None:
+            return None
+        name = self.var(address)
+        if name is None or name not in self._ds:
+            return None
+        return self._ds[name].attrs.get("units")
+
     def terms(self):
         """Map every term path to its variable name (``None`` if not materialized)."""
         return {path: self._resolve_var(term) for path, term in self._by_path.items()}

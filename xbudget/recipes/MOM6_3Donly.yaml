@@ -1,5 +1,6 @@
 ---
 mass: # finite-volume mass budget in units of kg/s
+  units: "kg s-1"
   lambda: "density"
   thickness: "thkcello"
   lhs:
@@ -7,7 +8,9 @@ mass: # finite-volume mass budget in units of kg/s
       Eulerian_tendency:
         product:
           thickness_tendency: null
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"
   rhs:
     sum:
@@ -29,15 +32,20 @@ mass: # finite-volume mass budget in units of kg/s
           interfacial:
             product:
               thickness_tendency: "vert_remap_h_tendency"
-              density: 1035.
+              density:
+                value: 1035.
+                units: "kg m-3"
               area: "areacello"
       surface_exchange_flux:
         product:
           thickness_tendency: "boundary_forcing_h_tendency"
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"
 
 heat: # finite-volume heat budget in units of J/s
+  units: "W"
   lambda: "thetao"
   surface_lambda: "tos"
   lhs:
@@ -61,10 +69,14 @@ heat: # finite-volume heat budget in units of J/s
       surface_ocean_flux_advective_negative_lhs:
         product:
           sign: -1.
-          specific_heat_capacity: 3992.
+          specific_heat_capacity:
+            value: 3992.
+            units: "J kg-1 K-1"
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"
   rhs:
     sum:
@@ -86,10 +98,14 @@ heat: # finite-volume heat budget in units of J/s
       surface_ocean_flux_advective_negative_rhs:
         product:
           sign: -1.
-          specific_heat_capacity: 3992.
+          specific_heat_capacity:
+            value: 3992.
+            units: "J kg-1 K-1"
           lambda_mass: "tos"
           thickness_tendency: "boundary_forcing_h_tendency"
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"
       bottom_flux:
         product:
@@ -101,6 +117,7 @@ heat: # finite-volume heat budget in units of J/s
           area: "areacello"
 
 salt: # finite-volume salt budget in units of kg/s
+  units: "kg s-1"
   lambda: "so"
   surface_lambda: "sos"
   lhs:
@@ -127,7 +144,9 @@ salt: # finite-volume salt budget in units of kg/s
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"
       
   rhs:
@@ -152,5 +171,7 @@ salt: # finite-volume salt budget in units of kg/s
           unit_conversion: 0.001
           lambda_mass: "sos"
           thickness_tendency: "boundary_forcing_h_tendency"
-          density: 1035.
+          density:
+            value: 1035.
+            units: "kg m-3"
           area: "areacello"

@@ -13,6 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "cf-units",
     "numpy",
     "pyyaml",
     "xarray",

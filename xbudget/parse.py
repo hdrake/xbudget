@@ -146,6 +146,11 @@ def _parse_operand(value, path, name):
         # Tolerated: a placeholder operand with no content is skipped.
         return None
     if isinstance(value, dict):
+        # A ``{value:, units:}`` mapping is a constant with declared units, not a
+        # sub-term. Distinguish by the ``value`` key (and the absence of any
+        # operation key): a real sub-term names operations, never ``value``.
+        if "value" in value and not (value.keys() & OPERATION_KEYS):
+            return _parse_constant(value, path, name)
         return _parse_term(value, path, name)
     if isinstance(value, bool):
         raise BudgetParseError(
@@ -160,6 +165,29 @@ def _parse_operand(value, path, name):
         f"Operand '{name}' at {_fmt(path)} has unsupported type "
         f"{type(value).__name__}."
     )
+
+
+def _parse_constant(body, path, name):
+    """Parse a ``{value:, units:}`` constant (units default to dimensionless)."""
+    value = body["value"]
+    if isinstance(value, bool) or not isinstance(value, numbers.Number):
+        raise BudgetParseError(
+            f"Constant '{name}' at {_fmt(path)} needs a numeric 'value', got "
+            f"{type(value).__name__}."
+        )
+    units = body.get("units", "1")
+    if not isinstance(units, str):
+        raise BudgetParseError(
+            f"Constant '{name}' at {_fmt(path)} 'units' must be a UDUNITS string, "
+            f"got {type(units).__name__}."
+        )
+    extra = set(body) - {"value", "units"}
+    if extra:
+        raise BudgetParseError(
+            f"Constant '{name}' at {_fmt(path)} has unexpected key(s) "
+            f"{sorted(extra)}; only 'value' and 'units' are allowed."
+        )
+    return Constant(float(value), units=units)
 
 
 def _single_operand(kind, body, path):

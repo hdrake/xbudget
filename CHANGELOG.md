@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Units handling (issue #28)
+
+- Every derived variable is now stamped with an inferred `units` attribute.
+  Units compose through the tree with real UDUNITS arithmetic (via `cf-units`):
+  a `product` multiplies its operands' units, a `sum` takes the common unit of
+  its (dimensionally compatible) summands, a `difference` preserves units, a
+  `reciprocal` inverts them, and a `lateral_divergence` carries the flux unit.
+  Inputs' units come from each diagnostic's own `units` attribute; hard-coded
+  constants declare theirs in the recipe.
+- Recipe constants may now carry units via a `{value:, units:}` mapping, e.g.
+  `density: {value: 1035., units: "kg m-3"}`. A bare number (`sign: -1.`) is
+  dimensionless. All shipped recipes are annotated (only `density` and
+  `specific_heat_capacity` needed it; salinity/sign/conversion factors are
+  dimensionless) and declare a top-level budget `units` (`mass`/`salt` →
+  `kg s-1`, `heat` → `W`).
+- `collect_budgets(..., strict=True)` enforces units: each budget that declares
+  a top-level `units` must have its side roots infer units convertible to the
+  declared ones, raising `UnitError` (exported) otherwise. Without `strict`, a
+  reconciliation failure only warns; inference and stamping happen either way.
+- `BudgetQuery` gained `.units(term)` (the stamped units of a materialized
+  term) and `.budget_units(budget)` (the declared target).
+- Practical salinity (`psu`), which UDUNITS does not define, is treated as
+  dimensionless (PSS-78); offset temperature (`degC`) is handled by cf-units'
+  in-product dimensionalization, so heat-content terms reconcile to `W`.
+- `cf-units` is now a dependency.
+
 ### Packaging
 
 - `pyyaml` is now declared as a dependency. It is imported at package import

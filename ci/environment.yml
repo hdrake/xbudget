@@ -4,6 +4,7 @@ channels:
   - nodefaults
 dependencies:
   - python>=3.11
+  - cf-units
   - cftime
   - dask
   - netcdf4
