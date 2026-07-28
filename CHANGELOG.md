@@ -17,16 +17,40 @@
   `specific_heat_capacity` needed it; salinity/sign/conversion factors are
   dimensionless) and declare a top-level budget `units` (`mass`/`salt` →
   `kg s-1`, `heat` → `W`).
-- `collect_budgets(..., strict=True)` enforces units: each budget that declares
-  a top-level `units` must have its side roots infer units convertible to the
-  declared ones, raising `UnitError` (exported) otherwise. Without `strict`, a
-  reconciliation failure only warns; inference and stamping happen either way.
+- Constants shared across a recipe can be declared once under a new top-level
+  `constants` key and referred to by name (`density: "seawater_density"`),
+  instead of repeating a `{value:, units:}` mapping at every use. `constants` is
+  the only top-level key that is not a budget; a string operand resolves against
+  it first and otherwise stays a diagnostic name. The shipped recipes use it for
+  their reference density and heat capacity (36 repeated blocks in
+  `ECCOV4r4_native.yaml` alone).
+- `collect_budgets(..., assert_unit_consistency=True)` enforces units: each
+  budget that declares a top-level `units` must have its side roots infer units
+  convertible to the declared ones, raising `UnitError` (exported) otherwise.
+  Left at its default of `False`, a reconciliation failure only warns; inference
+  and stamping happen either way.
 - `BudgetQuery` gained `.units(term)` (the stamped units of a materialized
   term) and `.budget_units(budget)` (the declared target).
+- The recipe display (`show_recipe`, and a `BudgetQuery` shown in a notebook)
+  annotates every node with its units in square brackets — `density: 1035.
+  [kg m-3]`, `lateral [×] [W]`. `show_recipe` takes an optional third argument,
+  the grid/dataset to read raw diagnostics' units from, so a recipe can be read
+  with its full unit arithmetic before anything is collected.
 - Practical salinity (`psu`), which UDUNITS does not define, is treated as
   dimensionless (PSS-78); offset temperature (`degC`) is handled by cf-units'
   in-product dimensionalization, so heat-content terms reconcile to `W`.
 - `cf-units` is now a dependency.
+
+### Engine
+
+- `lateral_divergence` now gets the same `allow_rechunk` treatment `difference`
+  has always had: its flux operands are put into a single chunk along the
+  differenced dimensions while xgcm works, and the caller's chunking is restored
+  afterwards. Previously only `difference` rechunked, so a horizontally chunked
+  flux made xgcm shuffle across chunk (and face) boundaries. Verified identical
+  to the byte on the ECCO V4r4 LLC90 budgets, roughly halving their wall clock.
+  `lateral_divergence` now also has a CI test, on a two-tile face-connected
+  synthetic grid.
 
 ### Packaging
 

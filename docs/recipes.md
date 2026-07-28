@@ -90,6 +90,35 @@ Only genuinely dimensional constants need this (`density`, `specific_heat_capaci
 `sign`, salinity-to-mass conversion factors, and the like are dimensionless and
 stay bare. See the *Units* section below.
 
+**Shared constants live at the root.** A reference density recurs at nearly every
+term of a budget, and repeating the mapping at each use is both tedious and a
+place for the copies to drift apart. Declare it once under the top-level
+`constants` key and refer to it by name:
+
+```yaml
+constants:
+  seawater_density:
+    value: 1035.
+    units: "kg m-3"
+
+mass:
+  units: "kg s-1"
+  lhs:
+    sum:
+      Eulerian_tendency:
+        product:
+          thickness_tendency: "dhdt"
+          density: "seawater_density"   # -> 1035. kg m-3
+          area: "areacello"
+```
+
+Entries take the same two forms an inline constant does (a bare number, or a
+`{value:, units:}` mapping). `constants` is the one top-level key that is not a
+budget. A string operand is looked up there first and otherwise treated as a
+diagnostic name, so a constant sharing a name with a dataset variable shadows it
+— name them distinctly. All the shipped recipes use this for their reference
+density and heat capacity.
+
 [udunits]: https://www.unidata.ucar.edu/software/udunits/
 
 Budget-level keys that are not `lhs`/`rhs` are metadata, carried through
@@ -143,13 +172,13 @@ mass:
   ...
 ```
 
-With `strict=True`, this is enforced: each budget that declares `units` must have
-its `lhs`/`rhs` roots infer units convertible to the declared ones, or
-`collect_budgets` raises `xbudget.UnitError`. Without `strict` (the default) a
-mismatch only warns — inference and stamping happen regardless.
+With `assert_unit_consistency=True`, this is enforced: each budget that declares
+`units` must have its `lhs`/`rhs` roots infer units convertible to the declared
+ones, or `collect_budgets` raises `xbudget.UnitError`. Left at its default of
+`False`, a mismatch only warns — inference and stamping happen regardless.
 
 ```python
-xbudget.collect_budgets(grid, recipe, strict=True)   # raises UnitError on a clash
+xbudget.collect_budgets(grid, recipe, assert_unit_consistency=True)  # UnitError on a clash
 q = xbudget.BudgetQuery(grid, recipe)
 q.budget_units("mass")            # -> "kg s-1"     (the declared target)
 q.units(("mass", "rhs"))          # -> "kg.s-1"     (what the run inferred)
@@ -169,14 +198,22 @@ A real recipe nests deeply, and printed as raw JSON it is hard to read. Instead,
 arrow, the way an `xarray.Dataset` repr expands:
 
 ```python
-xbudget.show_recipe(recipe)          # every budget
-xbudget.show_recipe(recipe, "heat")  # just one
+xbudget.show_recipe(recipe)                # every budget
+xbudget.show_recipe(recipe, "heat")        # just one
+xbudget.show_recipe(recipe, "heat", grid)  # ...annotated with units
 ```
 
 In a Jupyter/VSCode notebook it displays as an interactive HTML tree (operator
 badges, diagnostics, and constants distinguished); printed at a terminal it
 falls back to an indented ASCII tree. It reads a recipe directly, so you can
 inspect one before ever running it.
+
+Each node also carries its units in square brackets — `density: 1035. [kg m-3]`,
+`lateral [×] [W]` — composed up the tree by the same arithmetic
+`assert_unit_consistency` checks. Units enter at the leaves, so pass the data you
+intend to collect against (as the third argument above) and the whole tree
+resolves; reading it top-down then shows exactly *where* a unit stops being
+inferable. Without it, only the recipe's declared constants are annotated.
 
 Once you *have* run a budget, displaying the query does the same but annotated
 with each term's resolved variable name — with terms whose diagnostics were

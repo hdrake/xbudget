@@ -701,8 +701,32 @@ class BudgetQuery:
     def __repr__(self):
         return f"<{self._summary()}>"
 
+    def _units_of(self, node):
+        """The units to display for a node: what the run stamped, else inferred.
+
+        A materialized term's stamped ``units`` attribute is the authoritative
+        answer — it is what the evaluator actually built, missing operands and
+        all. Everything else (a raw diagnostic, a constant, a term that never
+        materialized) falls back to inferring from the tree, so the display is
+        annotated whether or not ``collect_budgets`` has run.
+        """
+        from .units import format_units, infer_units
+
+        if isinstance(node, Term) and self._ds is not None:
+            var = self._resolve_var(node)
+            if var is not None and var in self._ds:
+                stamped = self._ds[var].attrs.get("units")
+                if stamped:
+                    return stamped
+        return format_units(infer_units(node, self._diagnostic_units))
+
+    def _diagnostic_units(self, name):
+        if self._ds is None or name not in self._ds:
+            return None
+        return self._ds[name].attrs.get("units")
+
     def _repr_html_(self):
-        """Collapsible tree, annotated with each term's resolved variable name.
+        """Collapsible tree, annotated with each term's variable name and units.
 
         Terms whose diagnostics were missing from the dataset resolve to
         ``None`` (see :meth:`_resolve_var`) and are greyed out, so the display
@@ -712,5 +736,8 @@ class BudgetQuery:
         from .display import render_budgets_html
 
         return render_budgets_html(
-            self.budgets, resolve=self._resolve_var, header=self._summary()
+            self.budgets,
+            resolve=self._resolve_var,
+            units=self._units_of,
+            header=self._summary(),
         )

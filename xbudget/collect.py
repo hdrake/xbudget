@@ -68,7 +68,11 @@ def lateral_divergence(grid, Fx, Fy):
 
 
 def collect_budgets(
-    data, recipe, allow_rechunk=True, on_missing="warn", strict=False
+    data,
+    recipe,
+    allow_rechunk=True,
+    on_missing="warn",
+    assert_unit_consistency=False,
 ):
     """Materialize every budget term described by ``recipe`` into ``data``.
 
@@ -104,15 +108,14 @@ def collect_budgets(
         ``xbudget_missing`` attributes (query them with
         :meth:`xbudget.BudgetQuery.missing`), and a term declared ``optional`` in
         the recipe is exempt — its absence is expected and never alarms.
-    strict : bool (default: False)
+    assert_unit_consistency : bool (default: False)
         Enforce units. Every derived variable is stamped with an inferred
         ``units`` attribute (from its inputs' units via UDUNITS) regardless of
-        this flag. With ``strict=True``, each budget that declares a top-level
-        ``units`` must additionally have its side roots infer units convertible
-        to the declared ones, raising
-        :class:`~xbudget.evaluate.UnitError` otherwise; with ``strict=False`` a
-        reconciliation failure only warns. Query stamped units with
-        :meth:`xbudget.BudgetQuery.units`.
+        this flag. When ``True``, each budget that declares a top-level ``units``
+        must additionally have its side roots infer units convertible to the
+        declared ones, raising :class:`~xbudget.evaluate.UnitError` otherwise;
+        when ``False`` a reconciliation failure only warns. Query stamped units
+        with :meth:`xbudget.BudgetQuery.units`.
 
     Returns
     -------
@@ -137,6 +140,6 @@ def collect_budgets(
     budgets = parse_budgets(recipe)
     evaluate_budgets(
         data, budgets, allow_rechunk=allow_rechunk, on_missing=on_missing,
-        strict=strict,
+        assert_unit_consistency=assert_unit_consistency,
     )
     return data

@@ -19,8 +19,8 @@ unknown rather than a fabricated dimension.
 
 Every function here is pure and total (it never raises and never warns): it just
 answers "what are the units?". Whether an unknown or a mismatch is *tolerable*
-is policy, and lives in :mod:`xbudget.evaluate` (the ``strict`` flag) rather than
-here.
+is policy, and lives in :mod:`xbudget.evaluate` (the ``assert_unit_consistency``
+flag) rather than here.
 
 Two conventions worth knowing:
 
@@ -39,6 +39,17 @@ from operator import mul
 
 from cf_units import Unit
 
+from .nodes import (
+    Constant,
+    Difference,
+    LateralDivergence,
+    Product,
+    Reciprocal,
+    Sum,
+    Term,
+    VarRef,
+)
+
 __all__ = [
     "DIMENSIONLESS",
     "parse_units",
@@ -50,6 +61,7 @@ __all__ = [
     "divergence_units",
     "convertible",
     "format_units",
+    "infer_units",
 ]
 
 DIMENSIONLESS = Unit("1")
@@ -158,3 +170,64 @@ def convertible(unit, other):
 def format_units(unit):
     """A stable string for a ``Unit`` (for stamping as an attribute), or ``None``."""
     return None if unit is None else str(unit)
+
+
+def infer_units(node, lookup=None):
+    """Infer a node's units directly from the typed tree, without evaluating.
+
+    The evaluator infers units as a side-effect of building variables, which is
+    the authoritative answer but only exists after a run. This walks the same
+    tree with the same arithmetic and answers the question *statically*, so a
+    recipe can be shown with its units before (or without) any data — see
+    :func:`xbudget.display.show_recipe`.
+
+    ``lookup`` maps a raw diagnostic name to its units spec (typically
+    ``lambda name: ds[name].attrs.get("units")``). Without it only constants
+    carry units, so most terms come back unknown; with it, everything a
+    dimensionally complete recipe describes resolves.
+
+    Returns a :class:`cf_units.Unit` or ``None`` (unknown). Like the rest of this
+    module it never raises: an unresolvable node is unknown, not an error.
+    """
+    if lookup is None:
+        def lookup(_name):
+            return None
+    return _infer(node, lookup)
+
+
+def _infer(node, lookup):
+    if isinstance(node, Constant):
+        return parse_units(node.units)
+    if isinstance(node, VarRef):
+        return parse_units(lookup(node.name))
+    if isinstance(node, Term):
+        return _infer_term(node, lookup)
+    if isinstance(node, Sum):
+        return sum_units([_infer(o, lookup) for _n, o in node.terms])
+    if isinstance(node, Product):
+        return product_units([_infer(o, lookup) for _n, o in node.terms])
+    if isinstance(node, Difference):
+        return difference_units(_infer(node.operand, lookup))
+    if isinstance(node, Reciprocal):
+        return reciprocal_units(parse_units(lookup(node.source)))
+    if isinstance(node, LateralDivergence):
+        return divergence_units(_infer(node.fx, lookup), _infer(node.fy, lookup))
+    return None
+
+
+def _infer_term(term, lookup):
+    """Units of a term's *primary* value, mirroring the evaluator's choice.
+
+    A leaf ``var`` claims the term's name outright; otherwise the first
+    sum/product operation does, falling back to the first operation of any kind
+    (see ``evaluate._Evaluator._eval_term``).
+    """
+    if isinstance(term.explicit_var, str):
+        return parse_units(lookup(term.explicit_var))
+    if not term.operations:
+        return None
+    primary = next(
+        (op for op in term.operations if isinstance(op, (Sum, Product))),
+        term.operations[0],
+    )
+    return _infer(primary, lookup)
