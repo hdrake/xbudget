@@ -85,7 +85,7 @@ class MissingDiagnosticError(ValueError):
 
 
 class UnitError(ValueError):
-    """A budget's units did not reconcile under ``strict=True``.
+    """A budget's units did not reconcile under ``assert_unit_consistency=True``.
 
     Carries the list of ``(budget, side, inferred, declared, kind)`` issues, so
     the caller sees every mismatch/unknown at once rather than only the first.
@@ -102,7 +102,13 @@ def _new_name(path):
 
 
 class _Evaluator:
-    def __init__(self, data, allow_rechunk=True, on_missing="warn", strict=False):
+    def __init__(
+        self,
+        data,
+        allow_rechunk=True,
+        on_missing="warn",
+        assert_unit_consistency=False,
+    ):
         if on_missing not in ON_MISSING:
             raise ValueError(
                 f"Unknown on_missing {on_missing!r}; expected one of {ON_MISSING}."
@@ -115,7 +121,7 @@ class _Evaluator:
             self.ds = data
         self.allow_rechunk = allow_rechunk
         self.on_missing = on_missing
-        self.strict = strict
+        self.assert_unit_consistency = assert_unit_consistency
         # new variable name -> {"path", "op"}
         self.records = {}
         # Missing-diagnostic bookkeeping, drained once at the end of run().
@@ -230,22 +236,22 @@ class _Evaluator:
         self._report_units()
 
     def _report_units(self):
-        """Raise (strict) or warn (default) about accumulated unit issues, once."""
+        """Raise (asserting) or warn (default) about accumulated unit issues, once."""
         if not self._unit_issues:
             return
         detail = "\n".join(
             f"  - {i['location']}: {i['detail']}" for i in self._unit_issues
         )
-        if self.strict:
+        if self.assert_unit_consistency:
             raise UnitError(
-                "collect_budgets(strict=True): budget units did not reconcile:\n"
-                + detail,
+                "collect_budgets(assert_unit_consistency=True): budget units did "
+                "not reconcile:\n" + detail,
                 issues=list(self._unit_issues),
             )
         warnings.warn(
             "xbudget: budget units did not fully reconcile:\n" + detail
             + "\nInspect stamped units with BudgetQuery.units(...); pass "
-            "strict=True to fail instead.",
+            "assert_unit_consistency=True to fail instead.",
             UserWarning,
         )
 
@@ -346,6 +352,56 @@ class _Evaluator:
             out.attrs["xbudget_missing"] = list(missing)
         self._incomplete.append(out.name)
 
+    # -- chunking -----------------------------------------------------------
+    #
+    # `grid.diff` needs the dimension it differences along in a single chunk,
+    # both for the plain `difference` and for the X/Y differences a
+    # `lateral_divergence` is built from. With `allow_rechunk` we arrange that
+    # temporarily and put the caller's chunking back afterwards, so a recipe
+    # never forces the user to pre-chunk their dataset a particular way.
+
+    def _dataset_chunks(self):
+        """The dataset's chunk sizes, tolerating inconsistently chunked vars."""
+        try:
+            return dict(self.ds.chunksizes)
+        except Exception:
+            warnings.warn(
+                "Dataset chunks are inconsistent; using unify_chunks()",
+                UserWarning,
+            )
+            return dict(self.ds.unify_chunks().chunksizes)
+
+    def _axis_dims(self, axes):
+        """Every dimension name belonging to the named grid axes."""
+        return {
+            dim
+            for axis in axes
+            if axis in self.grid.axes
+            for dim in self.grid.axes[axis].coords.values()
+        }
+
+    @staticmethod
+    def _single_chunk_along(arr, dims):
+        """``arr`` rechunked into one chunk along ``dims``, the rest ``auto``."""
+        along = [d for d in arr.dims if d in dims]
+        if not along:
+            return arr
+        return arr.chunk({
+            **{d: -1 for d in along},
+            **{d: "auto" for d in arr.dims if d not in along},
+        })
+
+    @staticmethod
+    def _restore_chunks(var, original):
+        """Restore ``var``'s chunking for the dims whose original we know.
+
+        Leaves any others as ``grid.diff`` produced them. Naming only the dims
+        we want changed avoids reading ``var.chunksizes``, which raises when the
+        result's coords are chunked differently from its data.
+        """
+        restore = {d: original[d] for d in var.dims if d in original}
+        return var.chunk(restore) if restore else var
+
     # -- operations ---------------------------------------------------------
 
     def _eval_op(self, op, term, opt):
@@ -375,7 +431,7 @@ class _Evaluator:
             # The flux sub-terms already recorded whatever diagnostic they were
             # missing; a divergence of an absent flux is simply not built.
             return None, None, None
-        var = lateral_divergence(self.grid, fx, fy)
+        var = self._lateral_divergence(fx, fy)
         incomplete = bool(fx.attrs.get("xbudget_incomplete")) or bool(
             fy.attrs.get("xbudget_incomplete")
         )
@@ -385,6 +441,28 @@ class _Evaluator:
         return var, [fx.name, fy.name], {
             "missing": [], "incomplete": incomplete, "units": units,
         }
+
+    def _lateral_divergence(self, fx, fy):
+        """``div(Fx, Fy)`` on cell centers, chunked as ``difference`` chunks.
+
+        The chunking wrapper around :func:`xbudget.collect.lateral_divergence`
+        (the bare function, called below, does the xgcm work). A lateral
+        divergence is two ``grid.diff`` calls under the hood — one per horizontal
+        axis, stitched across face connections — so it wants the same treatment
+        ``_eval_difference`` gives a plain difference: the differenced dimensions
+        in a single chunk while xgcm works, the caller's chunking restored on the
+        way out.
+        """
+        if not self.allow_rechunk:
+            return lateral_divergence(self.grid, fx, fy)
+        original = self._dataset_chunks()
+        horizontal = self._axis_dims(("X", "Y"))
+        var = lateral_divergence(
+            self.grid,
+            self._single_chunk_along(fx, horizontal),
+            self._single_chunk_along(fy, horizontal),
+        )
+        return self._restore_chunks(var, original)
 
     def _eval_nary(self, op, term, opt):
         ds = self.ds
@@ -499,41 +577,20 @@ class _Evaluator:
         axis = candidate_axes[0]
 
         if self.allow_rechunk:
-            try:
-                original_chunks = dict(ds.chunksizes)
-            except Exception:
-                warnings.warn(
-                    "Dataset chunks are inconsistent; using unify_chunks()",
-                    UserWarning,
-                )
-                original_chunks = dict(ds.unify_chunks().chunksizes)
+            original_chunks = self._dataset_chunks()
 
-            axis_dim = [
-                d for d in source.dims if d in self.grid.axes[axis].coords.values()
-            ]
-            if len(axis_dim) != 1:
+            axis_dims = self._axis_dims((axis,))
+            source_dims = [d for d in source.dims if d in axis_dims]
+            if len(source_dims) != 1:
                 raise ValueError(
                     f"Expected to find one dimension for axis '{axis}' in "
-                    f"'{provenance}', but found {len(axis_dim)}: {axis_dim}"
+                    f"'{provenance}', but found {len(source_dims)}: {source_dims}"
                 )
-            axis_dim = axis_dim[0]
 
-            temporary_chunks = {
-                axis_dim: -1,
-                **{d: "auto" for d in source.dims if d != axis_dim},
-            }
             var = self.grid.diff(
-                source.chunk(temporary_chunks).fillna(0.0), axis=axis
+                self._single_chunk_along(source, axis_dims).fillna(0.0), axis=axis
             )
-            # Restore the original chunking of the dimensions we know; leave any
-            # others as `grid.diff` produced them. Only naming the dims we want
-            # changed avoids reading `var.chunksizes`, which raises when the
-            # result's coords are chunked differently from its data.
-            restore = {
-                d: original_chunks[d] for d in var.dims if d in original_chunks
-            }
-            if restore:
-                var = var.chunk(restore)
+            var = self._restore_chunks(var, original_chunks)
         else:
             var = self.grid.diff(source.fillna(0.0), axis)
 
@@ -543,7 +600,11 @@ class _Evaluator:
 
 
 def evaluate_budgets(
-    data, budgets, allow_rechunk=True, on_missing="warn", strict=False
+    data,
+    budgets,
+    allow_rechunk=True,
+    on_missing="warn",
+    assert_unit_consistency=False,
 ):
     """Evaluate parsed budgets into ``data``; return ``records``.
 
@@ -563,9 +624,9 @@ def evaluate_budgets(
         case the affected variables are stamped with ``xbudget_incomplete`` /
         ``xbudget_missing`` attributes, and terms declared ``optional`` in the
         recipe are exempt.
-    strict : bool, default False
+    assert_unit_consistency : bool, default False
         Enforce budget units. Each output variable is stamped with an inferred
-        ``units`` attribute regardless; ``strict=True`` additionally requires
+        ``units`` attribute regardless; when ``True`` this additionally requires
         every budget that declares a top-level ``units`` to have its side roots
         infer units convertible to the declared ones (and no unit clashes),
         raising :class:`UnitError` otherwise. When ``False`` a reconciliation
@@ -594,5 +655,8 @@ def evaluate_budgets(
     tree or want to control the two steps separately.
     """
     return _Evaluator(
-        data, allow_rechunk=allow_rechunk, on_missing=on_missing, strict=strict
+        data,
+        allow_rechunk=allow_rechunk,
+        on_missing=on_missing,
+        assert_unit_consistency=assert_unit_consistency,
     ).run(budgets)

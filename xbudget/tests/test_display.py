@@ -66,6 +66,61 @@ class TestShowRecipe:
         assert "a&lt;b&amp;c" in h
 
 
+class TestUnitsAnnotation:
+    """Units in square brackets after each term's name (the display's answer to
+    "what does this term come out in?", available before any run)."""
+
+    @staticmethod
+    def _with_units(grid):
+        grid._ds["diag_a"].attrs["units"] = "kg m-2 s-1"
+        grid._ds["diag_b"].attrs["units"] = "kg m-2 s-1"
+        grid._ds["area"].attrs["units"] = "m2"
+        grid._ds["flux"].attrs["units"] = "kg s-1"
+        return grid
+
+    def test_declared_constants_annotate_without_a_dataset(self):
+        recipe = {"b": {"rhs": {"product": {
+            "rho": {"value": 1035.0, "units": "kg m-3"}, "d": "diag_a",
+        }}}}
+        t = repr(show_recipe(recipe))
+        assert "rho: 1035. [kg m-3]" in t
+
+    def test_bare_numbers_are_not_annotated(self, preset):
+        # `sign: -1.` is dimensionless by default, not by declaration; a `[1]`
+        # on every sign would be noise.
+        t = repr(show_recipe(preset))
+        assert "sign: -1." in t and "sign: -1. [" not in t
+
+    def test_terms_annotate_from_the_dataset(self, preset, synthetic_grid):
+        grid = self._with_units(synthetic_grid)
+        t = repr(show_recipe(preset, "tracer", grid))
+        # Composed upwards: (kg m-2 s-1) * m2 -> kg s-1, on the term itself...
+        assert "diffusion [×] [kg.s-1]" in t
+        # ...and each leaf shows the units it contributed.
+        assert "area: area [m2]" in t
+
+    def test_without_data_terms_stay_unannotated(self, preset):
+        t = repr(show_recipe(preset, "tracer"))
+        assert "diffusion [×]" in t and "diffusion [×] [" not in t
+
+    def test_query_repr_prefers_the_stamped_units(self, preset, synthetic_grid):
+        grid = self._with_units(synthetic_grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xbudget.collect_budgets(grid, preset)
+        q = xbudget.BudgetQuery(grid, preset)
+        h = q._repr_html_()
+        stamped = grid._ds["tracer_rhs_diffusion"].attrs["units"]
+        assert f'<span class="xbdg-units">[{stamped}]</span>' in h
+
+    def test_query_repr_annotates_before_collecting(self, preset, synthetic_grid):
+        # Nothing has been materialized, so there is no stamped attribute to
+        # read; the display falls back to inferring from the recipe + dataset.
+        grid = self._with_units(synthetic_grid)
+        h = xbudget.BudgetQuery(grid, preset)._repr_html_()
+        assert 'class="xbdg-units"' in h
+
+
 class TestQueryRepr:
     def test_repr_html_annotates_and_greys_missing(self, preset, synthetic_grid):
         with warnings.catch_warnings():
