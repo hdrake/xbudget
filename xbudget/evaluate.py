@@ -431,7 +431,7 @@ class _Evaluator:
             # The flux sub-terms already recorded whatever diagnostic they were
             # missing; a divergence of an absent flux is simply not built.
             return None, None, None
-        var = self._divergence(fx, fy)
+        var = self._lateral_divergence(fx, fy)
         incomplete = bool(fx.attrs.get("xbudget_incomplete")) or bool(
             fy.attrs.get("xbudget_incomplete")
         )
@@ -442,14 +442,16 @@ class _Evaluator:
             "missing": [], "incomplete": incomplete, "units": units,
         }
 
-    def _divergence(self, fx, fy):
+    def _lateral_divergence(self, fx, fy):
         """``div(Fx, Fy)`` on cell centers, chunked as ``difference`` chunks.
 
-        A lateral divergence is two ``grid.diff`` calls under the hood — one per
-        horizontal axis, stitched across face connections — so it wants the same
-        treatment ``_eval_difference`` gives a plain difference: the differenced
-        dimensions in a single chunk while xgcm works, the caller's chunking
-        restored on the way out.
+        The chunking wrapper around :func:`xbudget.collect.lateral_divergence`
+        (the bare function, called below, does the xgcm work). A lateral
+        divergence is two ``grid.diff`` calls under the hood — one per horizontal
+        axis, stitched across face connections — so it wants the same treatment
+        ``_eval_difference`` gives a plain difference: the differenced dimensions
+        in a single chunk while xgcm works, the caller's chunking restored on the
+        way out.
         """
         if not self.allow_rechunk:
             return lateral_divergence(self.grid, fx, fy)
