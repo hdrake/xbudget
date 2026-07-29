@@ -167,15 +167,19 @@ def _badge(kind):
 
 
 def _diagnostic_units_lookup(data):
-    """A ``name -> units string`` reader over a grid/dataset (or nothing)."""
+    """``(name -> units string, name -> is present)`` over a grid/dataset.
+
+    Both are ``None`` when there is no data, which is what tells
+    :func:`xbudget.units.infer_units` it cannot know either answer.
+    """
     ds = getattr(data, "_ds", data)
     if ds is None:
-        return lambda _name: None
+        return None, None
 
     def lookup(name):
         return ds[name].attrs.get("units") if name in ds else None
 
-    return lookup
+    return lookup, (lambda name: name in ds)
 
 
 def units_annotator(data=None):
@@ -184,9 +188,14 @@ def units_annotator(data=None):
     Infers each node's units from the recipe tree (:func:`xbudget.units.infer_units`),
     reading raw diagnostics' units from ``data`` when one is given. Without
     ``data`` only declared constants carry units, so most terms stay unannotated.
+
+    When ``data`` is given, inference is told which diagnostics it holds, so a
+    term is annotated with what a run would *actually* build it from. Without
+    that, a single absent diagnostic would blank the units of every term above it
+    — including the budget roots, which are exactly the ones worth reading.
     """
-    lookup = _diagnostic_units_lookup(data)
-    return lambda node: format_units(infer_units(node, lookup))
+    lookup, available = _diagnostic_units_lookup(data)
+    return lambda node: format_units(infer_units(node, lookup, available))
 
 
 def _units_text(node, units):
@@ -251,7 +260,10 @@ def _op_contents_html(op, resolve, units):
             )
         return _term_html(op.operand, resolve, units)
     if isinstance(op, Reciprocal):
-        return _leaf_html("of", op.source, "xbdg-diag")
+        source = VarRef(op.source)
+        return _leaf_html(
+            "of", op.source, "xbdg-diag", _units_html(source, units)
+        )
     if isinstance(op, LateralDivergence):
         return _term_html(op.fx, resolve, units) + _term_html(op.fy, resolve, units)
     return ""

@@ -9,6 +9,17 @@ constants:
   seawater_heat_capacity:
     value: 3994.0
     units: "J kg-1 K-1"
+  # Unit-bookkeeping factors, not physical constants: each is numerically the
+  # identity (value x units == 1) and exists only to cancel a scale carried in
+  # an input's own `units` string. Writing them as bare numbers would leave that
+  # scale in the composed units, so a salt term would stamp itself
+  # `0.001 kg s-1` while holding values that are already kg/s.
+  salinity_scale:            # ECCO salt fluxes are `1e-3 m3 s-1` (psu x volume)
+    value: 0.001
+    units: "1e3"
+  grams_to_kilograms:        # SFLUX/oceSPtnd are `g m-2 s-1`
+    value: 0.001
+    units: "kg g-1"
 
 mass: # finite-volume mass budget in units of kg/s
   units: "kg s-1"
@@ -174,7 +185,7 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
         product:
           density: "seawater_density"
           volume: "volcello"
-          unit_conversion: 0.001
+          unit_conversion: "salinity_scale"
           saltcontenttend:
             product:
               dt_inv:
@@ -200,7 +211,7 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
           lateral:
             product:
               density: "seawater_density"
-              unit_conversion: 0.001
+              unit_conversion: "salinity_scale"
               sign: -1.0
               salt_flux_divergence:
                 lateral_divergence:
@@ -210,7 +221,7 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
           interfacial:
             product:
               density: "seawater_density"
-              unit_conversion: 0.001
+              unit_conversion: "salinity_scale"
               salt_flux_convergence:
                 difference: {advr_slt: "ADVr_SLT"}
 
@@ -219,7 +230,7 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
           lateral:
             product:
               density: "seawater_density"
-              unit_conversion: 0.001
+              unit_conversion: "salinity_scale"
               sign: -1.0
               salt_flux_divergence:
                 lateral_divergence:
@@ -229,18 +240,18 @@ salt: # finite-volume salt-content budget in units of kg/s  (salt mass, not sali
           explicit_vertical_diffusion:
             product:
               density: "seawater_density"
-              unit_conversion: 0.001
+              unit_conversion: "salinity_scale"
               salt_flux_convergence:
                 difference: {dfrE_slt: "DFrE_SLT"}
           implicit_vertical_diffusion:
             product:
               density: "seawater_density"
-              unit_conversion: 0.001
+              unit_conversion: "salinity_scale"
               salt_flux_convergence:
                 difference: {dfrI_slt: "DFrI_SLT"}
 
       surface_exchange_flux: # (SFLUX + oceSPtnd at k=0; oceSPtnd below) in g/m^2/s, mapped to kg/s
         product:
-          unit_conversion_g_to_kg: 0.001
+          unit_conversion_g_to_kg: "grams_to_kilograms"
           area: "rA"
           salt_forcing_per_unit_area: "boundary_forcing_salt_tendency"
