@@ -94,6 +94,18 @@
   changes, which fails if the feedstock's run requirements disagree with
   `pyproject.toml`. The autotick bot syncs a release's version and hash but
   never its dependencies.
+- The version is now derived from the git tag by `hatch-vcs` instead of being
+  read from a literal in `xbudget/version.py`. Releasing is just publishing a
+  GitHub Release tagged `vX.Y.Z` — there is no bump commit, and the tag and the
+  built artifact cannot disagree. `xbudget/_version.py` is generated at build
+  time (gitignored, shipped in the sdist and wheel) and `xbudget/version.py` is
+  now a shim that imports from it; `xbudget.__version__` is unchanged for
+  anything installed from a release.
+
+  Two consequences for anyone building xbudget themselves: a checkout without
+  tags (a shallow clone, or a fork that never fetched them) resolves a `.devN`
+  version rather than the release line, and the conda-forge feedstock will need
+  `hatch-vcs` added to its `host` requirements before the next release builds.
 
 [feedstock]: https://github.com/conda-forge/xbudget-feedstock
 

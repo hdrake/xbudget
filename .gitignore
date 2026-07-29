@@ -3,3 +3,6 @@ __pycache__
 /data/*
 .pytest_cache
 .DS_Store
+
+# Version file generated from the git tag by hatch-vcs at build time.
+xbudget/_version.py
