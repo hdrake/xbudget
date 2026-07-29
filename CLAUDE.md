@@ -28,6 +28,14 @@ conda activate docs_env_xbudget
 pip install -e .
 ```
 
+**Worktrees get their own env.** Any development or testing work in a git worktree must use a dedicated conda env named `docs_env_xbudget_<branch-or-worktree-name>` — never the shared `docs_env_xbudget`. The editable install (`pip install -e .`) points an env at a single checkout, so sharing one env across worktrees silently tests the wrong tree. For the `units-handling` branch:
+
+```bash
+conda env create -f docs/environment.yml -n docs_env_xbudget_units-handling
+conda activate docs_env_xbudget_units-handling
+pip install -e .   # run from inside the worktree
+```
+
 ## Core architecture
 
 The central abstraction is the **`recipe`** — a nested provenance tree (loaded from a YAML *recipe* file) describing how to build each budget term from raw diagnostics. It is the public input format. Internally it is parsed into a typed expression tree and evaluated.
