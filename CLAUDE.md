@@ -28,13 +28,21 @@ conda activate docs_env_xbudget
 pip install -e .
 ```
 
+**Worktrees get their own env.** Any development or testing work in a git worktree must use a dedicated conda env named `docs_env_xbudget_<branch-or-worktree-name>` — never the shared `docs_env_xbudget`. The editable install (`pip install -e .`) points an env at a single checkout, so sharing one env across worktrees silently tests the wrong tree. For the `units-handling` branch:
+
+```bash
+conda env create -f docs/environment.yml -n docs_env_xbudget_units-handling
+conda activate docs_env_xbudget_units-handling
+pip install -e .   # run from inside the worktree
+```
+
 ## Core architecture
 
 The central abstraction is the **`recipe`** — a nested provenance tree (loaded from a YAML *recipe* file) describing how to build each budget term from raw diagnostics. It is the public input format. Internally it is parsed into a typed expression tree and evaluated.
 
 ### The recipe tree (input format — unchanged)
 
-Top-level keys are budgets (`mass`, `heat`, `salt`). Each budget has `lhs` and/or `rhs` sub-trees plus metadata keys (`lambda`, `thickness`, `surface_lambda`) that the engine does not interpret. Within a side, terms nest recursively. A node names a diagnostic with a `var` key (`var: "thetao"`); a derived term omits `var` entirely (the `var: null` placeholders are optional as of 0.7.0) and carries one or more **operation** keys instead:
+Top-level keys are budgets (`mass`, `heat`, `salt`) — except `constants`, the one reserved key, which declares scalars shared across the recipe (`seawater_density: {value: 1035., units: "kg m-3"}`) that terms then refer to by name (`density: "seawater_density"`). References are substituted during parsing, so nothing downstream sees the table; a string operand resolves against it first and otherwise stays a diagnostic name. Each budget has `lhs` and/or `rhs` sub-trees plus metadata keys (`units`, `lambda`, `thickness`, `surface_lambda`) that the engine does not interpret as terms. Within a side, terms nest recursively. A node names a diagnostic with a `var` key (`var: "thetao"`); a derived term omits `var` entirely (the `var: null` placeholders are optional as of 0.7.0) and carries one or more **operation** keys instead:
 
 - `sum` — add the child terms together
 - `product` — multiply child terms (scalar numbers allowed as factors, e.g. `density: 1035.`, `sign: -1.`)
@@ -63,7 +71,9 @@ recipe ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets
 
 - **Naming.** One variable per node/operation with operator infixes dropped; no duplicate "copy" variables (108 → 57 on the MOM6 example; 73 on the ECCOv4r4 native-grid recipe, whose volume budget is Eulerian-only — the GM bolus is exposed as `bolus` metadata, not a budget term). `CHANGELOG.md` has the old→new table for anyone migrating from 0.6.x.
 - **Missing diagnostics are skipped, not fatal** — a `sum` drops only the missing operand and builds from the rest (flagged `xbudget_incomplete`); a `product` with a missing *required* factor is dropped entirely (an unknown factor is not a zero one). `collect_budgets(on_missing="warn"|"raise"|"ignore")` sets the policy; `optional: true` on a term exempts its subtree. Query it back with `BudgetQuery.missing()`.
-- **`difference` rechunking:** `allow_rechunk=True` (default) temporarily rechunks the difference dimension into a single chunk (required by `grid.diff`) then restores chunking.
+- **Rechunking:** `allow_rechunk=True` (default) temporarily rechunks the differenced dimension(s) into a single chunk (required by `grid.diff`) then restores the caller's chunking. This applies to **both** `difference` and `lateral_divergence` — they share `_dataset_chunks`/`_single_chunk_along`/`_restore_chunks` in `evaluate.py`. On the ECCO LLC90 budgets it is numerically identical and roughly halves wall clock.
+- **Units.** Every emitted variable is stamped with a `units` attr inferred through the tree (`units.py`, UDUNITS via `cf-units`); `collect_budgets(..., assert_unit_consistency=True)` additionally requires each budget's side roots to reconcile to its declared top-level `units` — same dimension **and** same magnitude — raising `UnitError` (it only warns by default). A side root that never materialized is exempt (that is `on_missing`'s job). Magnitude matters because a UDUNITS spec may carry a leading numeric scale: a conversion factor cancelling a scale in an input's own units (CF writes practical salinity as `1e-3`) must declare the reciprocal scale as *its* units (`{value: 0.001, units: "1e3"}`), or the term stamps itself `0.001 kg s-1` over correct kg/s values.
+- **Static unit inference.** `units.infer_units(node, lookup, available=)` answers the units question off the typed tree, without evaluating — which is what lets `show_recipe(recipe, budget, data)` and a notebook-displayed `BudgetQuery` annotate every node with `[units]`. Passing `available` (a `name -> bool` over the dataset) makes it mirror the *run* rather than the recipe: operands the evaluator would drop are dropped here too, instead of one absent diagnostic leaving every ancestor unannotated. The `_DROPPED` sentinel is what distinguishes "not built" from "built but unknown".
 - **Lenient parser.** `parse.py` **warns and skips** unavailable-diagnostic placeholders (e.g. a `null`-source `difference`) and stray non-operation keys instead of failing, so real recipes with such terms still load. A stray key usually means an enclosing `product:` was omitted (its factors are then silently dropped rather than multiplied), so those warnings are worth reading rather than filtering.
 - **xgcm version:** requires **xgcm >= 0.10.0** — `lateral_divergence` needs native face-connected differencing, first shipped there. 0.10.0 also removed `xgcm.Grid`'s `periodic` argument and renamed `boundary` to `padding` (both now raise `ValueError`), so every grid construction in `examples/` and `tests/` uses `padding=`; `periodic=False` translates to `padding="fill"`.
 
@@ -71,12 +81,13 @@ recipe ──parse_budgets──▶ typed tree (nodes.py) ──evaluate_budgets
 
 - `test_parse.py` — parser units + validation; asserts all shipped recipes parse; covers the tolerated-malformation path.
 - `test_characterization.py` (+ `characterization_MOM6.json`) — golden snapshot of the engine's absolute MOM6 output (data-gated; exercises reciprocal/difference-of-sub-term only via the real recipe locally).
-- `test_collect.py` — `collect_budgets` behavior (no recipe mutation, lhs/rhs, the grid-guard on `difference`).
+- `test_collect.py` — `collect_budgets` behavior (no recipe mutation, lhs/rhs, the grid-guard on `difference`, and the `lateral_divergence` rechunking on a two-tile face-connected synthetic grid — the only CI coverage of face-connected differencing).
 - `test_query.py` — the query layer, all on the synthetic grid so it actually runs in CI.
-- `test_missing_handling.py` / `test_optional_var.py` / `test_broadcast_warning.py` / `test_display.py` — missing-diagnostic handling, `var: null` optionality, the issue-#11 broadcast guard, and the tree display; all synthetic-grid, CI-safe.
+- `test_units.py` — the unit algebra, the `constants` table, static inference, stamping, and `assert_unit_consistency`; all pure or synthetic-grid.
+- `test_missing_handling.py` / `test_optional_var.py` / `test_broadcast_warning.py` / `test_display.py` — missing-diagnostic handling, `var: null` optionality, the issue-#11 broadcast guard, and the tree display (including its `[units]` annotation); all synthetic-grid, CI-safe.
 - `conftest.py` — `synthetic_grid` / `synthetic_preset` fixtures, plus `SYNTHETIC_PRESET_SKIPS` (a preset whose structurally-primary op is skipped at run time — the regression test for name resolution being a runtime fact).
 
-**CI has neither example dataset**, so every data-gated test skips there. Only the synthetic-grid tests actually protect the engine in CI; `lateral_divergence` and `reciprocal` on a real face-connected grid are exercised *only* by the data-gated characterization / ECCO notebooks locally.
+**CI has neither example dataset**, so every data-gated test skips there. Only the synthetic-grid tests actually protect the engine in CI; `reciprocal` on a real face-connected grid is exercised *only* by the data-gated characterization / ECCO notebooks locally (`lateral_divergence` now has the miniature face-connected test in `test_collect.py`, but the real LLC90 topology still only runs locally).
 
 ## Data & examples
 

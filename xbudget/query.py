@@ -329,6 +329,34 @@ class BudgetQuery:
         """
         return dict(self.metadata(budget).get("bolus", {}))
 
+    def budget_units(self, budget):
+        """The top-level ``units`` a budget declares, or ``None``.
+
+        The UDUNITS string a budget states as the units its closed sides should
+        reconcile to (e.g. ``"kg s-1"`` for ``mass``). Read from budget metadata;
+        raises ``KeyError`` for an unknown budget, as :meth:`metadata` does. This
+        is the *declared* target; :meth:`units` returns what a run actually
+        inferred for a given term.
+        """
+        return self.metadata(budget).get("units")
+
+    def units(self, address):
+        """The inferred ``units`` attribute stamped on a term's variable, or ``None``.
+
+        Reads the ``units`` attribute the evaluator stamped onto the materialized
+        variable (so it also works on a dataset reopened from disk). Returns
+        ``None`` when the query has no dataset, the term did not materialize, or
+        its units could not be inferred (an input's units were unknown). Accepts
+        the same addresses as :meth:`var` — a term name/path, an operation-suffixed
+        name, or a raw diagnostic.
+        """
+        if self._ds is None:
+            return None
+        name = self.var(address)
+        if name is None or name not in self._ds:
+            return None
+        return self._ds[name].attrs.get("units")
+
     def terms(self):
         """Map every term path to its variable name (``None`` if not materialized)."""
         return {path: self._resolve_var(term) for path, term in self._by_path.items()}
@@ -673,8 +701,35 @@ class BudgetQuery:
     def __repr__(self):
         return f"<{self._summary()}>"
 
+    def _units_of(self, node):
+        """The units to display for a node: what the run stamped, else inferred.
+
+        A materialized term's stamped ``units`` attribute is the authoritative
+        answer — it is what the evaluator actually built, missing operands and
+        all. Everything else (a raw diagnostic, a constant, a term that never
+        materialized) falls back to inferring from the tree, so the display is
+        annotated whether or not ``collect_budgets`` has run.
+        """
+        from .units import format_units, infer_units
+
+        if isinstance(node, Term) and self._ds is not None:
+            var = self._resolve_var(node)
+            if var is not None and var in self._ds:
+                stamped = self._ds[var].attrs.get("units")
+                if stamped:
+                    return stamped
+        available = None if self._ds is None else (lambda name: name in self._ds)
+        return format_units(
+            infer_units(node, self._diagnostic_units, available)
+        )
+
+    def _diagnostic_units(self, name):
+        if self._ds is None or name not in self._ds:
+            return None
+        return self._ds[name].attrs.get("units")
+
     def _repr_html_(self):
-        """Collapsible tree, annotated with each term's resolved variable name.
+        """Collapsible tree, annotated with each term's variable name and units.
 
         Terms whose diagnostics were missing from the dataset resolve to
         ``None`` (see :meth:`_resolve_var`) and are greyed out, so the display
@@ -684,5 +739,8 @@ class BudgetQuery:
         from .display import render_budgets_html
 
         return render_budgets_html(
-            self.budgets, resolve=self._resolve_var, header=self._summary()
+            self.budgets,
+            resolve=self._resolve_var,
+            units=self._units_of,
+            header=self._summary(),
         )

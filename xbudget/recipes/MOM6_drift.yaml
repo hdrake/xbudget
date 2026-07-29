@@ -1,5 +1,6 @@
 ---
 mass: # finite-volume mass budget in units of kg/s
+  units: "kg s-1"
   lambda: "density"
   thickness: "thkcello"
   lhs:
@@ -14,6 +15,7 @@ mass: # finite-volume mass budget in units of kg/s
         var: null
 
 heat: # finite-volume heat budget in units of J/s
+  units: "W"
   lambda: "thetao"
   surface_lambda: "tos"
   lhs:
@@ -36,6 +38,7 @@ heat: # finite-volume heat budget in units of J/s
         var: null
 
 salt: # finite-volume salt budget in units of kg/s
+  units: "kg s-1"
   lambda: "so"
   surface_lambda: "sos"
   lhs:

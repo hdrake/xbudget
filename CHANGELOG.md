@@ -2,6 +2,85 @@
 
 ## Unreleased
 
+### Units handling (issue #28)
+
+- Every derived variable is now stamped with an inferred `units` attribute.
+  Units compose through the tree with real UDUNITS arithmetic (via `cf-units`):
+  a `product` multiplies its operands' units, a `sum` takes the common unit of
+  its (dimensionally compatible) summands, a `difference` preserves units, a
+  `reciprocal` inverts them, and a `lateral_divergence` carries the flux unit.
+  Inputs' units come from each diagnostic's own `units` attribute; hard-coded
+  constants declare theirs in the recipe.
+- Recipe constants may now carry units via a `{value:, units:}` mapping, e.g.
+  `density: {value: 1035., units: "kg m-3"}`. A bare number (`sign: -1.`) is
+  dimensionless. All shipped recipes are annotated (only `density` and
+  `specific_heat_capacity` needed it; salinity/sign/conversion factors are
+  dimensionless) and declare a top-level budget `units` (`mass`/`salt` →
+  `kg s-1`, `heat` → `W`).
+- Constants shared across a recipe can be declared once under a new top-level
+  `constants` key and referred to by name (`density: "seawater_density"`),
+  instead of repeating a `{value:, units:}` mapping at every use. `constants` is
+  the only top-level key that is not a budget; a string operand resolves against
+  it first and otherwise stays a diagnostic name. The shipped recipes use it for
+  their reference density and heat capacity (36 repeated blocks in
+  `ECCOV4r4_native.yaml` alone).
+- `collect_budgets(..., assert_unit_consistency=True)` enforces units: each
+  budget that declares a top-level `units` must have its side roots infer *the
+  same* units — same dimension **and** same magnitude — raising `UnitError`
+  (exported) otherwise. Left at its default of `False`, a reconciliation failure
+  only warns; inference and stamping happen either way. A side root that never
+  materialized is skipped, since absent inputs are `on_missing`'s business.
+- Magnitude is checked because a leading numeric factor is part of a UDUNITS
+  spec, and so part of what a stamped attribute claims: a root inferring
+  `0.001 kg s-1` while holding values already in kg/s is mislabelled by a
+  thousand. That is what a conversion factor written as a bare (dimensionless)
+  number does when it cancels a scale carried in an input's own `units` — the
+  case CF's `1e-3` practical salinity creates. Such a factor must declare the
+  reciprocal scale as its units (`{value: 0.001, units: "1e3"}`), which
+  `ECCOV4r4_native.yaml` now does; its salt budget previously stamped
+  `0.001 kg s-1` on correct kg/s values.
+- `BudgetQuery` gained `.units(term)` (the stamped units of a materialized
+  term) and `.budget_units(budget)` (the declared target).
+- The recipe display (`show_recipe`, and a `BudgetQuery` shown in a notebook)
+  annotates every node with its units in square brackets — `density: 1035.
+  [kg m-3]`, `lateral [×] [W]`. `show_recipe` takes an optional third argument,
+  the grid/dataset to read raw diagnostics' units from, so a recipe can be read
+  with its full unit arithmetic before anything is collected.
+- `units.infer_units(node, lookup, available=)` takes an optional
+  "which diagnostics does the dataset hold?" predicate, and with it answers what
+  a run will *build* rather than what the recipe *describes* — dropping the
+  operands the evaluator drops instead of letting one absent diagnostic leave
+  every term above it unannotated. The display passes it whenever it has data.
+- Practical salinity (`psu`), which UDUNITS does not define, is treated as
+  dimensionless (PSS-78); offset temperature (`degC`) is handled by cf-units'
+  in-product dimensionalization, so heat-content terms reconcile to `W`.
+- `cf-units` is now a dependency.
+
+### Engine
+
+- A recipe using `lateral_divergence` without an `xgcm.Grid` now raises the same
+  clear `ValueError` a grid-less `difference` does, instead of failing later on
+  the grid-dependent rechunking bookkeeping.
+- Missing diagnostics are reported before unit issues: an absent input *causes*
+  unknown units, so under `on_missing="raise"` the error now names the
+  diagnostic rather than the symptom.
+- Rechunking is a no-op on unchunked (in-memory) data, which is already one chunk
+  along everything — `difference` and `lateral_divergence` no longer hand back a
+  lazy result where the caller passed an eager one.
+- A budget-level key written on a term (`units:` on a term rather than beside
+  `lhs`/`rhs`) gets its own warning instead of the generic "you may be missing an
+  enclosing `product`" hint, which pointed at the wrong fix.
+- A `constants` entry with no `value` raises `BudgetParseError` naming the path,
+  not a bare `KeyError`; and a budget named `constants` says the key is reserved.
+- `lateral_divergence` now gets the same `allow_rechunk` treatment `difference`
+  has always had: its flux operands are put into a single chunk along the
+  differenced dimensions while xgcm works, and the caller's chunking is restored
+  afterwards. Previously only `difference` rechunked, so a horizontally chunked
+  flux made xgcm shuffle across chunk (and face) boundaries. Verified identical
+  to the byte on the ECCO V4r4 LLC90 budgets, roughly halving their wall clock.
+  `lateral_divergence` now also has a CI test, on a two-tile face-connected
+  synthetic grid.
+
 ### Packaging
 
 - `pyyaml` is now declared as a dependency. It is imported at package import

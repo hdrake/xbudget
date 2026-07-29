@@ -57,6 +57,19 @@ from .collect import (
     _warn_if_summands_broadcast,
     lateral_divergence,
 )
+from .units import (
+    convertible,
+    difference_units,
+    divergence_units,
+    format_units,
+    parse_units,
+    product_units,
+    reciprocal_units,
+    same_scale,
+    scale_factor,
+    sum_compatible,
+    sum_units,
+)
 
 ON_MISSING = ("warn", "raise", "ignore")
 
@@ -73,13 +86,31 @@ class MissingDiagnosticError(ValueError):
         self.missing = missing
 
 
+class UnitError(ValueError):
+    """A budget's units did not reconcile under ``assert_unit_consistency=True``.
+
+    Carries the list of ``(budget, side, inferred, declared, kind)`` issues, so
+    the caller sees every mismatch/unknown at once rather than only the first.
+    """
+
+    def __init__(self, message, issues):
+        super().__init__(message)
+        self.issues = issues
+
+
 def _new_name(path):
     """Output variable name: the term path joined, without operator infixes."""
     return "_".join(path)
 
 
 class _Evaluator:
-    def __init__(self, data, allow_rechunk=True, on_missing="warn"):
+    def __init__(
+        self,
+        data,
+        allow_rechunk=True,
+        on_missing="warn",
+        assert_unit_consistency=False,
+    ):
         if on_missing not in ON_MISSING:
             raise ValueError(
                 f"Unknown on_missing {on_missing!r}; expected one of {ON_MISSING}."
@@ -92,19 +123,41 @@ class _Evaluator:
             self.ds = data
         self.allow_rechunk = allow_rechunk
         self.on_missing = on_missing
+        self.assert_unit_consistency = assert_unit_consistency
         # new variable name -> {"path", "op"}
         self.records = {}
         # Missing-diagnostic bookkeeping, drained once at the end of run().
         # Only *required* (non-optional) misses land here.
         self._missing = []        # list of (diagnostic_name, term_path tuple)
         self._incomplete = []     # names of emitted variables flagged incomplete
+        # (budget, side, inferred, declared, kind) unit reconciliation issues.
+        self._unit_issues = []
 
     def run(self, budgets):
         for budget in budgets.values():
             for term in budget.sides.values():
                 self._eval_term(term)
+        # Missing diagnostics first: an absent input is a *cause* of unknown
+        # units, so reporting "units could not be inferred" ahead of it would
+        # hand the user the symptom and swallow the name of the diagnostic they
+        # actually need to supply.
         self._finish()
+        self._check_units(budgets)
+        self._report_units()
         return self.records
+
+    def _require_grid(self, operation):
+        """Fail clearly when an operation that needs a grid was given a Dataset.
+
+        Checked in the evaluator rather than only inside the helpers, so it fires
+        before any grid-dependent bookkeeping (axis lookup, rechunking) — which
+        would otherwise raise an unhelpful ``AttributeError`` on ``None`` first.
+        """
+        if self.grid is None:
+            raise ValueError(
+                f"Input `data` must be an `xgcm.Grid` instance when using "
+                f"`{operation}` operations."
+            )
 
     # -- missing-diagnostic reporting ---------------------------------------
 
@@ -150,6 +203,104 @@ class _Evaluator:
                 UserWarning,
             )
         # on_missing == "ignore": stay silent (the attrs were still stamped).
+
+    # -- unit reconciliation ------------------------------------------------
+
+    def _check_units(self, budgets):
+        """Reconcile each declared budget's root sides against its stated units.
+
+        A budget that declares a top-level ``units`` (e.g. ``mass`` -> ``kg s-1``)
+        opts into the check: every materialized side root must infer units equal
+        to the declared ones — same dimension *and* same magnitude. Budgets that
+        declare no ``units`` are only stamped, never checked. Issues found here
+        join any sum-incompatibilities recorded during evaluation and are
+        reported once by :meth:`_report_units`.
+
+        Magnitude is checked, not just dimension, because a leading numeric
+        factor is part of a UDUNITS spec and therefore part of what a stamped
+        ``units`` attribute *claims*. A root that infers ``0.001 kg s-1`` while
+        holding values that are already kg/s is mislabelled by a factor of a
+        thousand for anyone who reads the attribute — the exact error this check
+        exists to catch, and one that dimensional convertibility cannot see.
+
+        A side root that never materialized (its diagnostics were missing) is
+        skipped rather than failed: ``on_missing`` is the setting that governs
+        absent inputs, and failing here too would report one problem twice under
+        the wrong name.
+        """
+        for name, budget in budgets.items():
+            declared_str = budget.metadata.get("units")
+            if declared_str is None:
+                continue
+            declared = parse_units(declared_str)
+            if declared is None:
+                self._unit_issues.append({
+                    "location": name,
+                    "kind": "declared-unparseable",
+                    "detail": (
+                        f"budget declares units {declared_str!r}, which UDUNITS "
+                        f"cannot parse"
+                    ),
+                })
+                continue
+            for side, term in budget.sides.items():
+                var = _new_name(term.path)
+                if var not in self.ds:
+                    continue
+                inferred = parse_units(self.ds[var].attrs.get("units"))
+                if inferred is None:
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "unknown",
+                        "detail": (
+                            f"units could not be inferred; expected {declared_str!r}"
+                        ),
+                    })
+                elif not convertible(inferred, declared):
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "mismatch",
+                        "detail": (
+                            f"inferred {format_units(inferred)!r} not convertible "
+                            f"to declared {declared_str!r}"
+                        ),
+                    })
+                elif not same_scale(inferred, declared):
+                    factor = scale_factor(inferred, declared)
+                    self._unit_issues.append({
+                        "location": f"{name}/{side}",
+                        "kind": "scale-mismatch",
+                        "detail": (
+                            f"inferred {format_units(inferred)!r} is "
+                            f"{factor:g}x the declared {declared_str!r} — right "
+                            f"dimension, wrong magnitude, so the stamped units "
+                            f"misreport the values by that factor. A conversion "
+                            f"constant that cancels a scale in an input's units "
+                            f"must declare the reciprocal scale as its own units "
+                            f"(e.g. {{value: 0.001, units: \"1e3\"}}), not be "
+                            f"written as a bare (dimensionless) number"
+                        ),
+                    })
+
+    def _report_units(self):
+        """Raise (asserting) or warn (default) about accumulated unit issues, once."""
+        if not self._unit_issues:
+            return
+        detail = "\n".join(
+            f"  - {i['location']}: {i['detail']}" for i in self._unit_issues
+        )
+        if self.assert_unit_consistency:
+            raise UnitError(
+                "collect_budgets(assert_unit_consistency=True): budget units did "
+                "not reconcile:\n" + detail,
+                issues=list(self._unit_issues),
+            )
+        warnings.warn(
+            "xbudget: budget units did not fully reconcile:\n" + detail
+            + "\nInspect stamped units with BudgetQuery.units(...); pass "
+            "assert_unit_consistency=True to fail instead.",
+            UserWarning,
+        )
 
     # -- term ---------------------------------------------------------------
 
@@ -217,6 +368,9 @@ class _Evaluator:
                 "xbudget_path": list(term.path),
                 "xbudget_op": op.kind,
             }
+            units = format_units(opmeta.get("units") if opmeta else None)
+            if units is not None:
+                out.attrs["units"] = units
             self._stamp_incompleteness(out, opmeta, opt)
             self.ds[new_name] = out
             self.records[new_name] = {"path": list(term.path), "op": op.kind}
@@ -245,6 +399,61 @@ class _Evaluator:
             out.attrs["xbudget_missing"] = list(missing)
         self._incomplete.append(out.name)
 
+    # -- chunking -----------------------------------------------------------
+    #
+    # `grid.diff` needs the dimension it differences along in a single chunk,
+    # both for the plain `difference` and for the X/Y differences a
+    # `lateral_divergence` is built from. With `allow_rechunk` we arrange that
+    # temporarily and put the caller's chunking back afterwards, so a recipe
+    # never forces the user to pre-chunk their dataset a particular way.
+
+    def _dataset_chunks(self):
+        """The dataset's chunk sizes, tolerating inconsistently chunked vars."""
+        try:
+            return dict(self.ds.chunksizes)
+        except Exception:
+            warnings.warn(
+                "Dataset chunks are inconsistent; using unify_chunks()",
+                UserWarning,
+            )
+            return dict(self.ds.unify_chunks().chunksizes)
+
+    def _axis_dims(self, axes):
+        """Every dimension name belonging to the named grid axes."""
+        return {
+            dim
+            for axis in axes
+            if axis in self.grid.axes
+            for dim in self.grid.axes[axis].coords.values()
+        }
+
+    @staticmethod
+    def _single_chunk_along(arr, dims):
+        """``arr`` rechunked into one chunk along ``dims``, the rest ``auto``.
+
+        A no-op on an unchunked (in-memory) array: it is already one chunk along
+        everything, so calling ``.chunk()`` would only convert it to dask and
+        hand the caller a lazy result where they passed an eager one.
+        """
+        along = [d for d in arr.dims if d in dims]
+        if not along or arr.chunks is None:
+            return arr
+        return arr.chunk({
+            **{d: -1 for d in along},
+            **{d: "auto" for d in arr.dims if d not in along},
+        })
+
+    @staticmethod
+    def _restore_chunks(var, original):
+        """Restore ``var``'s chunking for the dims whose original we know.
+
+        Leaves any others as ``grid.diff`` produced them. Naming only the dims
+        we want changed avoids reading ``var.chunksizes``, which raises when the
+        result's coords are chunked differently from its data.
+        """
+        restore = {d: original[d] for d in var.dims if d in original}
+        return var.chunk(restore) if restore else var
+
     # -- operations ---------------------------------------------------------
 
     def _eval_op(self, op, term, opt):
@@ -264,49 +473,84 @@ class _Evaluator:
             self._record_missing(op.source, term.path, alarming=not opt)
             return None, None, None
         var = 1.0 / xr.where(ds[op.source] == 0, np.inf, ds[op.source])
-        return var, op.source, {"missing": [], "incomplete": False}
+        units = reciprocal_units(parse_units(ds[op.source].attrs.get("units")))
+        return var, op.source, {"missing": [], "incomplete": False, "units": units}
 
     def _eval_lateral_divergence(self, op, term, opt):
+        self._require_grid("lateral_divergence")
         fx = self._eval_term(op.fx, optional_ctx=opt)
         fy = self._eval_term(op.fy, optional_ctx=opt)
         if fx is None or fy is None:
             # The flux sub-terms already recorded whatever diagnostic they were
             # missing; a divergence of an absent flux is simply not built.
             return None, None, None
-        var = lateral_divergence(self.grid, fx, fy)
+        var = self._lateral_divergence(fx, fy)
         incomplete = bool(fx.attrs.get("xbudget_incomplete")) or bool(
             fy.attrs.get("xbudget_incomplete")
         )
-        return var, [fx.name, fy.name], {"missing": [], "incomplete": incomplete}
+        units = divergence_units(
+            parse_units(fx.attrs.get("units")), parse_units(fy.attrs.get("units"))
+        )
+        return var, [fx.name, fy.name], {
+            "missing": [], "incomplete": incomplete, "units": units,
+        }
+
+    def _lateral_divergence(self, fx, fy):
+        """``div(Fx, Fy)`` on cell centers, chunked as ``difference`` chunks.
+
+        The chunking wrapper around :func:`xbudget.collect.lateral_divergence`
+        (the bare function, called below, does the xgcm work). A lateral
+        divergence is two ``grid.diff`` calls under the hood — one per horizontal
+        axis, stitched across face connections — so it wants the same treatment
+        ``_eval_difference`` gives a plain difference: the differenced dimensions
+        in a single chunk while xgcm works, the caller's chunking restored on the
+        way out.
+        """
+        if not self.allow_rechunk:
+            return lateral_divergence(self.grid, fx, fy)
+        original = self._dataset_chunks()
+        horizontal = self._axis_dims(("X", "Y"))
+        var = lateral_divergence(
+            self.grid,
+            self._single_chunk_along(fx, horizontal),
+            self._single_chunk_along(fy, horizontal),
+        )
+        return self._restore_chunks(var, original)
 
     def _eval_nary(self, op, term, opt):
         ds = self.ds
         op_list = []
+        unit_list = []     # units of each surviving operand, in lockstep with op_list
         missing = []       # labels/names of operands dropped at this node
         incomplete = False
         for name, operand in op.terms:
             value = None
+            units = None
             operand_optional = opt
             if isinstance(operand, Term):
                 operand_optional = opt or operand.optional
                 child = self._eval_term(operand, optional_ctx=operand_optional)
                 if child is not None:
                     value = child
+                    units = parse_units(child.attrs.get("units"))
                     if child.attrs.get("xbudget_incomplete"):
                         incomplete = True
                 # else: the child already recorded its own missing diagnostic.
                 dropped_label = name
             elif isinstance(operand, Constant):
                 value = operand.value
+                units = parse_units(operand.units)
             elif isinstance(operand, VarRef):
                 if operand.name in ds:
                     value = ds[operand.name]
+                    units = parse_units(ds[operand.name].attrs.get("units"))
                 else:
                     self._record_missing(operand.name, term.path, alarming=not opt)
                 dropped_label = operand.name
 
             if value is not None:
                 op_list.append(value)
+                unit_list.append(units)
                 continue
 
             # This operand did not resolve.
@@ -323,20 +567,32 @@ class _Evaluator:
             return None, None, None
         if op.kind == "sum":
             _warn_if_summands_broadcast(op_list, _new_name(term.path))
+            if not sum_compatible(unit_list):
+                # A genuine unit clash between summands (not merely an unknown one)
+                # is always a recipe bug; record it for the end-of-run report.
+                self._unit_issues.append({
+                    "location": _new_name(term.path),
+                    "kind": "sum-incompatible",
+                    "detail": (
+                        "summands have incompatible units: "
+                        + ", ".join(sorted({format_units(u) for u in unit_list if u}))
+                    ),
+                })
+            units = sum_units(unit_list)
+        else:
+            units = product_units(unit_list)
         var = sum(op_list) if op.kind == "sum" else reduce(mul, op_list, 1)
         if not isinstance(var, xr.DataArray):
             # Reduced to a pure scalar (e.g. all variable operands missing); no
             # variable is emitted in this case.
             return None, None, None
         provenance = [o.name if isinstance(o, xr.DataArray) else o for o in op_list]
-        return var, provenance, {"missing": missing, "incomplete": incomplete}
+        return var, provenance, {
+            "missing": missing, "incomplete": incomplete, "units": units,
+        }
 
     def _eval_difference(self, op, term, opt):
-        if self.grid is None:
-            raise ValueError(
-                "Input `data` must be an `xgcm.Grid` instance when using "
-                "`difference` operations."
-            )
+        self._require_grid("difference")
         ds = self.ds
         operand = op.operand
         incomplete = False
@@ -352,6 +608,7 @@ class _Evaluator:
                 return None, None, None
             provenance = source.name
             incomplete = bool(source.attrs.get("xbudget_incomplete"))
+        units = difference_units(parse_units(source.attrs.get("units")))
 
         staggered_axes = {
             axn: c
@@ -369,48 +626,35 @@ class _Evaluator:
         axis = candidate_axes[0]
 
         if self.allow_rechunk:
-            try:
-                original_chunks = dict(ds.chunksizes)
-            except Exception:
-                warnings.warn(
-                    "Dataset chunks are inconsistent; using unify_chunks()",
-                    UserWarning,
-                )
-                original_chunks = dict(ds.unify_chunks().chunksizes)
+            original_chunks = self._dataset_chunks()
 
-            axis_dim = [
-                d for d in source.dims if d in self.grid.axes[axis].coords.values()
-            ]
-            if len(axis_dim) != 1:
+            axis_dims = self._axis_dims((axis,))
+            source_dims = [d for d in source.dims if d in axis_dims]
+            if len(source_dims) != 1:
                 raise ValueError(
                     f"Expected to find one dimension for axis '{axis}' in "
-                    f"'{provenance}', but found {len(axis_dim)}: {axis_dim}"
+                    f"'{provenance}', but found {len(source_dims)}: {source_dims}"
                 )
-            axis_dim = axis_dim[0]
 
-            temporary_chunks = {
-                axis_dim: -1,
-                **{d: "auto" for d in source.dims if d != axis_dim},
-            }
             var = self.grid.diff(
-                source.chunk(temporary_chunks).fillna(0.0), axis=axis
+                self._single_chunk_along(source, axis_dims).fillna(0.0), axis=axis
             )
-            # Restore the original chunking of the dimensions we know; leave any
-            # others as `grid.diff` produced them. Only naming the dims we want
-            # changed avoids reading `var.chunksizes`, which raises when the
-            # result's coords are chunked differently from its data.
-            restore = {
-                d: original_chunks[d] for d in var.dims if d in original_chunks
-            }
-            if restore:
-                var = var.chunk(restore)
+            var = self._restore_chunks(var, original_chunks)
         else:
             var = self.grid.diff(source.fillna(0.0), axis)
 
-        return var, provenance, {"missing": [], "incomplete": incomplete}
+        return var, provenance, {
+            "missing": [], "incomplete": incomplete, "units": units,
+        }
 
 
-def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
+def evaluate_budgets(
+    data,
+    budgets,
+    allow_rechunk=True,
+    on_missing="warn",
+    assert_unit_consistency=False,
+):
     """Evaluate parsed budgets into ``data``; return ``records``.
 
     Parameters
@@ -429,6 +673,13 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
         case the affected variables are stamped with ``xbudget_incomplete`` /
         ``xbudget_missing`` attributes, and terms declared ``optional`` in the
         recipe are exempt.
+    assert_unit_consistency : bool, default False
+        Enforce budget units. Each output variable is stamped with an inferred
+        ``units`` attribute regardless; when ``True`` this additionally requires
+        every budget that declares a top-level ``units`` to have its side roots
+        infer units convertible to the declared ones (and no unit clashes),
+        raising :class:`UnitError` otherwise. When ``False`` a reconciliation
+        failure only warns.
 
     Returns
     -------
@@ -453,5 +704,8 @@ def evaluate_budgets(data, budgets, allow_rechunk=True, on_missing="warn"):
     tree or want to control the two steps separately.
     """
     return _Evaluator(
-        data, allow_rechunk=allow_rechunk, on_missing=on_missing
+        data,
+        allow_rechunk=allow_rechunk,
+        on_missing=on_missing,
+        assert_unit_consistency=assert_unit_consistency,
     ).run(budgets)

@@ -73,6 +73,78 @@ lateral:
     area: "areacello"
 ```
 
+**Constants can carry units.** A bare number is treated as *dimensionless*. To
+give a constant a physical unit — so it participates in unit inference — write it
+as a `{value:, units:}` mapping with a [UDUNITS][udunits] string:
+
+```yaml
+product:
+  thickness_tendency: "dhdt"          # its own units come from the dataset
+  density:
+    value: 1035.
+    units: "kg m-3"
+  area: "areacello"
+```
+
+A genuinely dimensionless factor — a `sign`, a fraction — stays bare.
+
+````{warning}
+A **unit-conversion factor is the one thing that looks dimensionless and is
+not.** If it exists to cancel a scale that an input carries in its own `units`
+string, it has to declare the reciprocal scale, or the scale survives into the
+result and the stamped `units` misreport the values by exactly that factor.
+
+CF writes practical salinity as a scale: ECCO's salt fluxes are `1e-3 m3 s-1`.
+A recipe multiplying one by `0.001` to reach kg/s must say so:
+
+```yaml
+constants:
+  salinity_scale:
+    value: 0.001
+    units: "1e3"      # value x units == 1: numerically the identity,
+                      # dimensionally the thing that cancels the input's 1e-3
+```
+
+Written as a bare `0.001` instead, the values are still right but the term
+stamps itself `0.001 kg s-1` — a thousand-fold lie to anyone who reads the
+attribute. `assert_unit_consistency=True` catches this (see *Units* below).
+````
+
+**Shared constants live at the root.** A reference density recurs at nearly every
+term of a budget, and repeating the mapping at each use is both tedious and a
+place for the copies to drift apart. Declare it once under the top-level
+`constants` key and refer to it by name:
+
+```yaml
+constants:
+  seawater_density:
+    value: 1035.
+    units: "kg m-3"
+
+mass:
+  units: "kg s-1"
+  lhs:
+    sum:
+      Eulerian_tendency:
+        product:
+          thickness_tendency: "dhdt"
+          density: "seawater_density"   # -> 1035. kg m-3
+          area: "areacello"
+```
+
+Entries take the same two forms an inline constant does (a bare number, or a
+`{value:, units:}` mapping). `constants` is the one top-level key that is not a
+budget, so a budget cannot be named that.
+
+References are resolved for the operands of a `sum` or a `product`: a string
+there is looked up in the table first, and otherwise treated as a diagnostic
+name. (The operand of a `difference` or a `reciprocal` is always a diagnostic —
+differencing a constant is not a thing you want.) A constant sharing a name with
+a dataset variable therefore *shadows* it — name them distinctly. All the shipped
+recipes use the table for their reference density and heat capacity.
+
+[udunits]: https://www.unidata.ucar.edu/software/udunits/
+
 Budget-level keys that are not `lhs`/`rhs` are metadata, carried through
 untouched — `lambda` (the tracer the budget is written in), `thickness`,
 `surface_lambda`:
@@ -102,6 +174,58 @@ q.surface_lambda("heat") # -> "tos"
 q.metadata("mass")       # -> {"lambda": "density", "thickness": "thkcello"}
 ```
 
+## Units
+
+Every variable xbudget materializes is stamped with an inferred `units`
+attribute. Units compose through the tree with real [UDUNITS][udunits] arithmetic
+(via [`cf-units`][cf-units]): a `product` multiplies its operands' units, a `sum`
+takes the common unit of its summands (which must be dimensionally compatible), a
+`difference` preserves units, a `reciprocal` inverts them, and a
+`lateral_divergence` carries the flux unit. Each input's units come from its own
+`units` attribute in the dataset; constants supply theirs from the recipe (see
+above). If any input's units are unknown (a missing or unparseable `units`
+attribute), the result's units are left unset rather than guessed.
+
+A budget can declare the units its closed sides should reconcile to, as a
+top-level `units` key:
+
+```yaml
+mass:
+  units: "kg s-1"
+  lambda: "density"
+  ...
+```
+
+With `assert_unit_consistency=True`, this is enforced: each budget that declares
+`units` must have its `lhs`/`rhs` roots infer *the same* units — same dimension
+and same magnitude — or `collect_budgets` raises `xbudget.UnitError`. Left at its
+default of `False`, a mismatch only warns — inference and stamping happen
+regardless.
+
+Magnitude counts because a leading numeric factor is part of a UDUNITS spec, and
+therefore part of what a stamped attribute claims: a root inferring
+`0.001 kg s-1` while holding values already in kg/s is mislabelled by a thousand.
+That is the conversion-factor trap above, and this is what catches it.
+
+One thing it does *not* check: a side root that never materialized, because a
+diagnostic it needs was absent, is skipped rather than failed. Absent inputs are
+`on_missing`'s business — reporting the same problem twice under the name "units"
+would only obscure it.
+
+```python
+xbudget.collect_budgets(grid, recipe, assert_unit_consistency=True)  # UnitError on a clash
+q = xbudget.BudgetQuery(grid, recipe)
+q.budget_units("mass")            # -> "kg s-1"     (the declared target)
+q.units(("mass", "rhs"))          # -> "kg.s-1"     (what the run inferred)
+```
+
+Two conventions the shipped recipes rely on: practical salinity (`psu`), which
+UDUNITS does not define, is treated as dimensionless (PSS-78), and offset
+temperature (`degC`) is dimensionalized to kelvin inside a product, so
+heat-content terms (θ·cₚ·ρ·…) reconcile to `W`.
+
+[cf-units]: https://cf-units.readthedocs.io/
+
 ## Seeing a recipe
 
 A real recipe nests deeply, and printed as raw JSON it is hard to read. Instead,
@@ -109,14 +233,28 @@ A real recipe nests deeply, and printed as raw JSON it is hard to read. Instead,
 arrow, the way an `xarray.Dataset` repr expands:
 
 ```python
-xbudget.show_recipe(recipe)          # every budget
-xbudget.show_recipe(recipe, "heat")  # just one
+xbudget.show_recipe(recipe)                # every budget
+xbudget.show_recipe(recipe, "heat")        # just one
+xbudget.show_recipe(recipe, "heat", grid)  # ...annotated with units
 ```
 
 In a Jupyter/VSCode notebook it displays as an interactive HTML tree (operator
 badges, diagnostics, and constants distinguished); printed at a terminal it
 falls back to an indented ASCII tree. It reads a recipe directly, so you can
 inspect one before ever running it.
+
+Each node also carries its units in square brackets — `density: 1035. [kg m-3]`,
+`lateral [×] [W]` — composed up the tree by the same arithmetic
+`assert_unit_consistency` checks (`xbudget.units.infer_units`, if you want to
+call it yourself). Units enter at the leaves, so pass the data you intend to
+collect against (as the third argument above) and the whole tree resolves;
+reading it top-down then shows exactly *where* a unit stops being inferable.
+Without it, only the recipe's declared constants are annotated.
+
+Given the data, the annotation answers *what a run will build*, not *what the
+recipe describes*: a term whose diagnostics are absent is left blank, and its
+parents still show their units, because that is what the run will produce from
+the operands that remain.
 
 Once you *have* run a budget, displaying the query does the same but annotated
 with each term's resolved variable name — with terms whose diagnostics were
@@ -139,6 +277,45 @@ xbudget.BudgetQuery(grid, recipe)    # same tree, annotated with run state
 
 `sum` and `product` take any number of operands, each of which may itself be a
 sub-term, so budgets nest as deeply as you need.
+
+(the-grid)=
+### The grid
+
+`sum`, `product` and `reciprocal` work on a plain `xarray.Dataset`. The two
+operations that cross cell faces — `difference` and `lateral_divergence` — need
+an `xgcm.Grid`, because only the grid knows which dimension is staggered against
+which. Pass one in place of the dataset and everything else is unchanged:
+
+```python
+import xgcm
+
+grid = xgcm.Grid(
+    ds,
+    coords={                                  # your staggered dimension names
+        "X": {"center": "xh", "outer": "xq"},
+        "Y": {"center": "yh", "outer": "yq"},
+    },
+    metrics={("X", "Y"): ["areacello"]},       # optional
+    padding="fill",                            # boundary condition
+    autoparse_metadata=False,
+)
+xbudget.collect_budgets(grid, recipe)          # derived vars land in grid._ds
+```
+
+Position names are xgcm's (`center` plus one of `left`/`right`/`inner`/`outer`).
+Without a grid, a recipe using either operation fails immediately with
+`Input 'data' must be an 'xgcm.Grid' instance…` rather than producing something
+subtly wrong.
+
+```{note}
+xbudget requires **xgcm ≥ 0.10**, which renamed `boundary=` to `padding=` and
+removed `periodic=` — both now raise `ValueError`. Older tutorials and answers
+still show the previous spelling; `periodic=False` becomes `padding="fill"`.
+```
+
+For a face-connected topology (the ECCO LLC90 tiles, say), also pass
+`face_connections`; `lateral_divergence` then stitches the seams correctly. See
+`examples/load_example_ecco_grid.py` for a complete 13-tile grid.
 
 **`difference`** takes a single operand and differences it across whichever axis
 it is staggered on — the axis is inferred from the operand's dimensions, so you

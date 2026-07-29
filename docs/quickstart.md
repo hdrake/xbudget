@@ -96,6 +96,14 @@ Each term is named after its path through the recipe, joined with underscores â€
 `heat` / `rhs` / `advection` becomes `heat_rhs_advection`. Nothing to memorize,
 and nothing to parse back out.
 
+```{note}
+A budget's metadata sits alongside its sides in that result, so a recipe
+declaring `units: "kg s-1"` or `lambda: "thetao"` gives
+`{'mass': {'units': 'kg s-1', 'lhs': {...}, 'rhs': {...}}}`. Iterate with
+`q.aggregate()["mass"]["rhs"]` rather than over every value, or you will hit a
+metadata string where you expected a dict of terms.
+```
+
 ## Does it close?
 
 This is the question xbudget exists to answer:
@@ -205,7 +213,8 @@ Two things this page skipped, both of which real budgets need:
 
 - **Grids.** Terms built by differencing a staggered flux (or by a lateral
   divergence) need an `xgcm.Grid` instead of a plain `Dataset`, so xbudget knows
-  the discretization. Pass the grid to `collect_budgets` in exactly the same way.
+  the discretization. Pass the grid to `collect_budgets` in exactly the same way;
+  [Writing a recipe](the-grid) shows how to build one.
 - **Scale.** The examples below run against real model output, with dask.
 
 For a full worked budget, see the

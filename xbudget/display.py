@@ -17,10 +17,16 @@ Two renderings, one walker:
 - ``__repr__`` — an indented ``├─``/``└─`` ASCII tree, for terminals and any
   context that does not render HTML.
 
+Both annotate each node with its units in square brackets — ``density: 1035.
+[kg m-3]``, ``lateral [×] [W]`` — inferred through the tree by
+:func:`xbudget.units.infer_units`, so a recipe shows the same unit arithmetic
+``assert_unit_consistency`` checks, before anything is evaluated.
+
 Entry points:
 
 - :func:`show_recipe` — inspect a recipe offline (no dataset). Returns a small
-  displayable object; ``show_recipe(recipe, "heat")`` scopes to one budget.
+  displayable object; ``show_recipe(recipe, "heat", grid)`` scopes to one budget
+  and reads its diagnostics' units from ``grid``.
 - :meth:`xbudget.query.BudgetQuery._repr_html_` — the same tree, but annotated
   with each term's resolved variable name and with unmaterialized terms greyed
   out, so displaying a query in a notebook shows structure *and* run state.
@@ -38,6 +44,7 @@ from .nodes import (
     VarRef,
 )
 from .parse import parse_budgets
+from .units import format_units, infer_units
 
 __all__ = ["show_recipe"]
 
@@ -118,6 +125,12 @@ _CSS = """<style>
   font-style: italic;
   margin-left: 0.5em;
 }
+.xbdg-wrap .xbdg-units {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  color: var(--xbdg-muted);
+  margin-left: 0.4em;
+}
 .xbdg-wrap .xbdg-leaf { padding: 1px 0; }
 .xbdg-wrap .xbdg-label { color: var(--xbdg-muted); }
 .xbdg-wrap .xbdg-diag {
@@ -149,38 +162,110 @@ def _badge(kind):
 
 
 # ---------------------------------------------------------------------------
+# Units annotation
+# ---------------------------------------------------------------------------
+
+
+def _diagnostic_units_lookup(data):
+    """``(name -> units string, name -> is present)`` over a grid/dataset.
+
+    Both are ``None`` when there is no data, which is what tells
+    :func:`xbudget.units.infer_units` it cannot know either answer.
+    """
+    ds = getattr(data, "_ds", data)
+    if ds is None:
+        return None, None
+
+    def lookup(name):
+        return ds[name].attrs.get("units") if name in ds else None
+
+    return lookup, (lambda name: name in ds)
+
+
+def units_annotator(data=None):
+    """Build the ``node -> units string`` callback the renderers annotate with.
+
+    Infers each node's units from the recipe tree (:func:`xbudget.units.infer_units`),
+    reading raw diagnostics' units from ``data`` when one is given. Without
+    ``data`` only declared constants carry units, so most terms stay unannotated.
+
+    When ``data`` is given, inference is told which diagnostics it holds, so a
+    term is annotated with what a run would *actually* build it from. Without
+    that, a single absent diagnostic would blank the units of every term above it
+    — including the budget roots, which are exactly the ones worth reading.
+    """
+    lookup, available = _diagnostic_units_lookup(data)
+    return lambda node: format_units(infer_units(node, lookup, available))
+
+
+def _units_text(node, units):
+    """The units to display for one node, or ``None`` to show none.
+
+    A bare number (``sign: -1.``) is dimensionless by default rather than by
+    declaration, so annotating it is noise; a constant that *declares* units is
+    worth showing.
+    """
+    if units is None:
+        return None
+    if isinstance(node, Constant) and node.units == "1":
+        return None
+    return units(node)
+
+
+def _units_html(node, units):
+    text = _units_text(node, units)
+    return "" if text is None else f'<span class="xbdg-units">[{_esc(text)}]</span>'
+
+
+def _units_suffix(node, units):
+    text = _units_text(node, units)
+    return "" if text is None else f" [{text}]"
+
+
+# ---------------------------------------------------------------------------
 # HTML rendering
 # ---------------------------------------------------------------------------
 
 
-def _leaf_html(label, value, value_cls):
+def _leaf_html(label, value, value_cls, units_html=""):
     return (
         f'<div class="xbdg-leaf">'
         f'<span class="xbdg-label">{_esc(label)}:</span> '
-        f'<span class="{value_cls}">{_esc(value)}</span></div>'
+        f'<span class="{value_cls}">{_esc(value)}</span>{units_html}</div>'
     )
 
 
-def _op_contents_html(op, resolve):
+def _op_contents_html(op, resolve, units):
     """The operands of one operation, as HTML rows/sub-trees."""
     if isinstance(op, (Sum, Product)):
         parts = []
         for name, operand in op.terms:
             if isinstance(operand, Constant):
-                parts.append(_leaf_html(name, _fmt_const(operand.value), "xbdg-const"))
+                parts.append(_leaf_html(
+                    name, _fmt_const(operand.value), "xbdg-const",
+                    _units_html(operand, units),
+                ))
             elif isinstance(operand, VarRef):
-                parts.append(_leaf_html(name, operand.name, "xbdg-diag"))
+                parts.append(_leaf_html(
+                    name, operand.name, "xbdg-diag", _units_html(operand, units)
+                ))
             else:  # Term
-                parts.append(_term_html(operand, resolve))
+                parts.append(_term_html(operand, resolve, units))
         return "".join(parts)
     if isinstance(op, Difference):
         if isinstance(op.operand, VarRef):
-            return _leaf_html("of", op.operand.name, "xbdg-diag")
-        return _term_html(op.operand, resolve)
+            return _leaf_html(
+                "of", op.operand.name, "xbdg-diag",
+                _units_html(op.operand, units),
+            )
+        return _term_html(op.operand, resolve, units)
     if isinstance(op, Reciprocal):
-        return _leaf_html("of", op.source, "xbdg-diag")
+        source = VarRef(op.source)
+        return _leaf_html(
+            "of", op.source, "xbdg-diag", _units_html(source, units)
+        )
     if isinstance(op, LateralDivergence):
-        return _term_html(op.fx, resolve) + _term_html(op.fy, resolve)
+        return _term_html(op.fx, resolve, units) + _term_html(op.fy, resolve, units)
     return ""
 
 
@@ -194,10 +279,11 @@ def _annotation_html(term, resolve):
     return f'<span class="xbdg-var">{_esc(var)}</span>'
 
 
-def _term_html(term, resolve):
+def _term_html(term, resolve, units):
     missing_cls = ""
     if resolve is not None and resolve(term) is None:
         missing_cls = " xbdg-missing"
+    unit_html = _units_html(term, units)
 
     # A leaf term (no operations) is either a direct reference to a raw
     # diagnostic (explicit_var) or an empty placeholder.
@@ -207,7 +293,7 @@ def _term_html(term, resolve):
         return (
             f'<div class="xbdg-leaf{missing_cls}">'
             f'<span class="xbdg-name">{_esc(term.name)}</span> '
-            f'<span class="{cls}">{_esc(value)}</span></div>'
+            f'<span class="{cls}">{_esc(value)}</span>{unit_html}</div>'
         )
 
     annot = _annotation_html(term, resolve)
@@ -215,21 +301,24 @@ def _term_html(term, resolve):
         op = term.operations[0]
         summary = (
             f'<span class="xbdg-name">{_esc(term.name)}</span>'
-            f"{_badge(op.kind)}{annot}"
+            f"{_badge(op.kind)}{unit_html}{annot}"
         )
-        body = _op_contents_html(op, resolve)
+        body = _op_contents_html(op, resolve, units)
     else:
         # Several operations on one term (e.g. a bulk product AND an equivalent
         # finer sum): give each its own collapsible group so their operands do
         # not run together.
         badges = "".join(_badge(op.kind) for op in term.operations)
-        summary = f'<span class="xbdg-name">{_esc(term.name)}</span>{badges}{annot}'
+        summary = (
+            f'<span class="xbdg-name">{_esc(term.name)}</span>'
+            f"{badges}{unit_html}{annot}"
+        )
         groups = []
         for op in term.operations:
             groups.append(
                 f'<details><summary>{_badge(op.kind)}'
                 f'<span class="xbdg-meta">{_esc(op.kind)}</span></summary>'
-                f'<div class="xbdg-body">{_op_contents_html(op, resolve)}</div>'
+                f'<div class="xbdg-body">{_op_contents_html(op, resolve, units)}</div>'
                 f"</details>"
             )
         body = "".join(groups)
@@ -240,12 +329,14 @@ def _term_html(term, resolve):
     )
 
 
-def _budget_html(budget, resolve):
+def _budget_html(budget, resolve, units):
     meta = "".join(
         f'<span class="xbdg-meta">{_esc(k)}={_esc(v)}</span>'
         for k, v in budget.metadata.items()
     )
-    sides = "".join(_term_html(term, resolve) for term in budget.sides.values())
+    sides = "".join(
+        _term_html(term, resolve, units) for term in budget.sides.values()
+    )
     return (
         f'<details class="xbdg-budget" open><summary>'
         f'<span class="xbdg-name">{_esc(budget.name)}</span>{meta}</summary>'
@@ -253,16 +344,18 @@ def _budget_html(budget, resolve):
     )
 
 
-def render_budgets_html(budgets, resolve=None, header=None):
+def render_budgets_html(budgets, resolve=None, units=None, header=None):
     """Render ``{name: Budget}`` as a collapsible HTML tree.
 
     ``resolve`` is an optional ``Term -> variable name or None`` callback
     (:meth:`xbudget.query.BudgetQuery._resolve_var`); when given, each term is
     annotated with its dataset variable name and unmaterialized terms are greyed
-    out. ``header`` is an optional title line.
+    out. ``units`` is an optional ``node -> units string or None`` callback (see
+    :func:`units_annotator`); when given, each node is annotated with its units
+    in square brackets. ``header`` is an optional title line.
     """
     head = f'<div class="xbdg-header">{_esc(header)}</div>' if header else ""
-    body = "".join(_budget_html(b, resolve) for b in budgets.values())
+    body = "".join(_budget_html(b, resolve, units) for b in budgets.values())
     return f'<div class="xbdg-wrap">{_CSS}{head}{body}</div>'
 
 
@@ -271,23 +364,24 @@ def render_budgets_html(budgets, resolve=None, header=None):
 # ---------------------------------------------------------------------------
 
 
-def _text_lines(label, node, resolve, prefix, is_last):
+def _text_lines(label, node, resolve, units, prefix, is_last):
     """Yield the ASCII-tree lines for one node under ``label``."""
     connector = "└─ " if is_last else "├─ "
     child_prefix = prefix + ("   " if is_last else "│  ")
+    unit_suffix = _units_suffix(node, units)
 
     if isinstance(node, Constant):
-        yield f"{prefix}{connector}{label}: {_fmt_const(node.value)}"
+        yield f"{prefix}{connector}{label}: {_fmt_const(node.value)}{unit_suffix}"
         return
     if isinstance(node, VarRef):
-        yield f"{prefix}{connector}{label}: {node.name}"
+        yield f"{prefix}{connector}{label}: {node.name}{unit_suffix}"
         return
 
     # A Term.
     term = node
     if not term.operations:
         value = term.explicit_var if isinstance(term.explicit_var, str) else "—"
-        yield f"{prefix}{connector}{label}: {value}"
+        yield f"{prefix}{connector}{label}: {value}{unit_suffix}"
         return
 
     suffix = ""
@@ -295,7 +389,7 @@ def _text_lines(label, node, resolve, prefix, is_last):
         var = resolve(term)
         suffix = f"  -> {var}" if var is not None else "  (unavailable)"
     ops = " ".join(_OP_SYMBOLS.get(op.kind, op.kind) for op in term.operations)
-    yield f"{prefix}{connector}{label} [{ops}]{suffix}"
+    yield f"{prefix}{connector}{label} [{ops}]{unit_suffix}{suffix}"
 
     children = []  # (child_label, child_node)
     for op in term.operations:
@@ -311,12 +405,18 @@ def _text_lines(label, node, resolve, prefix, is_last):
             children.append((op.fy.name, op.fy))
     for i, (child_label, child_node) in enumerate(children):
         yield from _text_lines(
-            child_label, child_node, resolve, child_prefix, i == len(children) - 1
+            child_label, child_node, resolve, units, child_prefix,
+            i == len(children) - 1,
         )
 
 
-def render_budgets_text(budgets, resolve=None, header=None):
-    """Render ``{name: Budget}`` as an indented ASCII tree."""
+def render_budgets_text(budgets, resolve=None, units=None, header=None):
+    """Render ``{name: Budget}`` as an indented ASCII tree.
+
+    ``resolve`` and ``units`` are the same optional callbacks
+    :func:`render_budgets_html` takes; a node's units are shown in square
+    brackets after its name.
+    """
     lines = []
     if header:
         lines.append(header)
@@ -331,7 +431,7 @@ def render_budgets_text(budgets, resolve=None, header=None):
         sides = list(budget.sides.items())
         for j, (_side, term) in enumerate(sides):
             lines.extend(
-                _text_lines(term.name, term, resolve, "", j == len(sides) - 1)
+                _text_lines(term.name, term, resolve, units, "", j == len(sides) - 1)
             )
     return "\n".join(lines)
 
@@ -348,21 +448,26 @@ class _RecipeView:
     ASCII tree in a terminal (``__repr__``).
     """
 
-    def __init__(self, budgets):
+    def __init__(self, budgets, units=None):
         self._budgets = budgets
+        self._units = units
 
     def _header(self):
         return "xbudget recipe · " + ", ".join(self._budgets)
 
     def _repr_html_(self):
-        return render_budgets_html(self._budgets, header=self._header())
+        return render_budgets_html(
+            self._budgets, units=self._units, header=self._header()
+        )
 
     def __repr__(self):
-        return render_budgets_text(self._budgets, header=self._header())
+        return render_budgets_text(
+            self._budgets, units=self._units, header=self._header()
+        )
 
 
-def show_recipe(recipe, budget=None):
-    """Display a recipe as a collapsible tree.
+def show_recipe(recipe, budget=None, data=None):
+    """Display a recipe as a collapsible tree, annotated with each term's units.
 
     Parameters
     ----------
@@ -372,6 +477,12 @@ def show_recipe(recipe, budget=None):
     budget : str, optional
         Show only this budget (``"mass"``, ``"heat"``, ``"salt"``). Default:
         all budgets in the recipe.
+    data : xgcm.Grid, xr.Dataset, or None
+        Where to read raw diagnostics' ``units`` attributes from. Units are
+        inferred through the tree from its leaves, so passing the data you intend
+        to collect against annotates the whole recipe — reading the tree top-down
+        then shows *where* a unit stops being inferable. Without it only declared
+        constants carry units, and most terms show none.
 
     Returns
     -------
@@ -383,7 +494,7 @@ def show_recipe(recipe, budget=None):
     --------
     >>> import xbudget
     >>> recipe = xbudget.load_preset_budget("MOM6")
-    >>> xbudget.show_recipe(recipe, "heat")   # doctest: +SKIP
+    >>> xbudget.show_recipe(recipe, "heat", grid)   # doctest: +SKIP
     """
     budgets = parse_budgets(recipe)
     if budget is not None:
@@ -392,4 +503,4 @@ def show_recipe(recipe, budget=None):
                 f"No budget {budget!r} in recipe. Available: {list(budgets)}."
             )
         budgets = {budget: budgets[budget]}
-    return _RecipeView(budgets)
+    return _RecipeView(budgets, units=units_annotator(data))

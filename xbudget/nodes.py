@@ -23,8 +23,16 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Constant:
-    """A scalar factor/addend in a sum or product (e.g. a density, a sign)."""
+    """A scalar factor/addend in a sum or product (e.g. a density, a sign).
+
+    ``units`` is a UDUNITS string carried alongside the value so unit inference
+    can include hard-coded constants (a density is ``kg m-3``, a sign is
+    dimensionless). A bare number in the recipe (``sign: -1.``) has no declared
+    units and is treated as dimensionless (``"1"``); the ``{value:, units:}``
+    dict form pins a dimensional one (``density: {value: 1035., units: "kg m-3"}``).
+    """
     value: float
+    units: str = "1"
 
 
 @dataclass(frozen=True)
